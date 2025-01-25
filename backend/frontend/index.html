@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATP</title>
+    <link rel="stylesheet" href="font.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Varela+Round&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+
+    <div class="con">
+        <div class="game-con">
+            <div class="top-half">
+                <div class="player-one-con player-con">
+                    <div class="player-one-name-con player-name-con poppins-medium center">Player One</div>
+                    <div class="player-one-n poppins-medium center">N</div>
+                    <div class="player-one-n poppins-medium center">O</div>
+                </div>
+                <div class="player-two-con player-con">
+                    <div class="player-two-name-con player-name-con poppins-medium center">Player Two</div>
+                    <div class="player-two-n poppins-medium center">N</div>
+                    <div class="player-two-n poppins-medium center">O</div>
+                </div>
+            </div>
+            <div class="bottom-half">
+                <div class="player-one-con player-con">
+                    <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
+                        <div class="single-num center">1</div>
+                        <div class="single-num center">5</div>
+                        <div class="single-num center">4</div>
+                        <div class="single-num center">3</div>
+                    </div>
+                    <div class="player-one-n poppins-medium center p1-number">1</div>
+                    <div class="player-one-n poppins-medium center p1-order">0</div>
+                </div>
+                <div class="player-two-con player-con">
+
+                    <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
+                        <div class="single-num center">1</div>
+                        <div class="single-num center">5</div>
+                        <div class="single-num center">4</div>
+                        <div class="single-num center">3</div>
+                    </div>
+
+                    <div class="player-two-n poppins-medium center p1-number">0</div>
+                    <div class="player-two-n poppins-medium center p1-order">0</div>
+                </div>
+            </div>
+            <div class="bottom-action-cons">
+                <input type="number" placeholder="4 digit numbers" name="" id="" class="answer-input poppins-medium">
+
+                <button class="bottom-btn poppins-medium join-game" onclick="handleJoinGame()">Join Game</button>
+
+
+            </div>
+        </div>
+
+    </div>
+    <div class="status"></div>
+    <!-- 
+    <button onclick="handleJoinGame()" class="join-game">Join Game</button>
+    <button onclick="handleResignGame()" class="resign-game">Resign</button> -->
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const answerInput = document.querySelector(".answer-input");
+        let answer = 0;
+
+
+
+
+
+        const joinGameBtn = document.querySelector(".join-game");
+        joinGameBtn.classList.add("btn-disabled");
+
+
+        answerInput.addEventListener("input", () => {
+            const inputValue = answerInput.value; // Get the value of the input
+            answer = inputValue;
+            if (inputValue.toString().length < 4) {
+                joinGameBtn.classList.add("btn-disabled");
+            } else {
+                joinGameBtn.classList.remove("btn-disabled");
+
+            }
+        });
+
+
+
+        const resignGameBtn = document.querySelector(".resign-game");
+        const statusText = document.querySelector(".status");
+
+        const socket = io();
+        let roomId = null;
+        let playerName = null;
+        statusText.innerText = "Join"
+
+
+
+        socket.on("gamejoined", (msg) => {
+
+            roomId = msg.roomId;
+            playerName = msg.playerName;
+
+            if (playerName == "Player One") {
+                statusText.innerText = playerName + "waiting for a partner..."
+                joinGameBtn.classList.add("btn-waiting");
+                joinGameBtn.innerText = "waiting...";
+
+            } else {
+                statusText.innerText = playerName + "Game Started"
+                joinGameBtn.classList.add("btn-started");
+                joinGameBtn.innerText = "Resign";
+
+            }
+        });
+
+
+        socket.on("gamestarted", (msg) => {
+            console.log(msg.roomId, roomId, "<--- this should be the same")
+            if (msg.roomId == roomId) {
+                joinGameBtn.classList.remove("btn-waiting");
+                joinGameBtn.classList.add("btn-started");
+                joinGameBtn.innerText = "Resign";
+            }
+        });
+        socket.on("partnerleft", (msg) => {
+            joinGameBtn.classList.remove("btn-started");
+            joinGameBtn.classList.remove("btn-waiting");
+
+            joinGameBtn.innerText = "Join Game";
+
+            roomId = null;
+
+
+        });
+
+
+
+
+        socket.on("gameresigned", (msg) => {
+            joinGameBtn.classList.remove("btn-started");
+            joinGameBtn.classList.remove("btn-waiting");
+
+            joinGameBtn.innerText = "Join Game";
+
+
+            roomId = null;
+
+
+        });
+
+
+
+
+
+        function handleJoinGame() {
+
+            if (answer.toString().length > 3 && roomId == null) {
+                socket.emit('joingame', "Hello ATP");
+            } else if (joinGameBtn.innerText === "Resign") {
+                handleResignGame();
+            } else {
+                console.log(joinGameBtn.innerText === "Resign", joinGameBtn.innerText)
+            }
+        }
+
+        function handleResignGame() {
+            socket.emit('resigngame', { roomId: roomId, playerName: playerName });
+
+            joinGameBtn.classList.remove("btn-started");
+            joinGameBtn.classList.remove("btn-waiting");
+
+            joinGameBtn.innerText = "Join Game";
+            roomId = null;
+
+
+        }
+
+
+
+        // Example for periodic socket emit (commented out):
+        // setInterval(() => {
+        //     socket.emit('chat message', "Hello world");
+        // }, 2000);
+    </script>
+</body>
+
+</html>
