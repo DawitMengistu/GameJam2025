@@ -120,6 +120,31 @@ io.on('connection', (socket) => {
     });
 
 
+    socket.on('guessput', (msg) => {
+        const { roomId, playerName, guess } = msg;
+
+
+        if (rooms[roomId] && rooms[roomId][playerName]) {
+            // Convert inputValue to an array of numbers and add it to the history
+            const guessArray = guess.toString().split('').map(Number);
+            rooms[roomId][playerName].history = [...rooms[roomId][playerName].history, ...guessArray];
+
+            console.log(`Updated history for ${playerName} in room ${roomId}:`, rooms[roomId][playerName].history);
+
+            // Check if playerOne and playerTwo history are equal
+            const playerOneHistory = rooms[roomId].playerOne.history;
+            const playerTwoHistory = rooms[roomId].playerTwo.history;
+
+            const historiesAreEqual = JSON.stringify(playerOneHistory) === JSON.stringify(playerTwoHistory);
+
+            console.log(`Player histories are ${historiesAreEqual ? "equal" : "not equal"}`);
+            socket.emit('historyUpdate', { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
+        } else {
+            console.log(`Invalid roomId or playerName: roomId=${roomId}, playerName=${playerName}`);
+        }
+    });
+
+
 });
 
 

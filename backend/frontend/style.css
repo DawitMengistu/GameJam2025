@@ -2,7 +2,9 @@
     --green-main: #6c9a4c;
     --blue-main: #5b69a6;
     --red-main: #ad5a4a;
+    --red-number: #000000;
     --green-hovered: #608446;
+    --balck-border: #3b3b3b;
 }
 
 body {
@@ -10,14 +12,15 @@ body {
     height: 100vh;
     color: white;
     font-size: 20px;
-
+    overflow: hidden;
 }
+
+
 
 .center {
     display: grid;
     align-items: center;
     justify-content: center;
-    background-color: palegreen;
 }
 
 .con {
@@ -31,8 +34,8 @@ body {
 
 .game-con {
     width: 600px;
-    height: 80%;
-    background-color: plum;
+    height: 600px;
+    background-color: white;
     margin-bottom: 10px;
     display: grid;
     grid-template-rows: 60px auto;
@@ -44,37 +47,62 @@ body {
 }
 
 .top-half {
-    background-color: gray;
+    color: var(--balck-border);
     display: grid;
     gap: 5px;
     grid-template-columns: 1fr 1fr;
+    border-bottom: 2px solid var(--balck-border);
 }
 
+
 .bottom-half {
-    background-color: gray;
+    width: 100%;
+    overflow-y: scroll;
+    height: calc(100% - 80px);
+}
+
+.singleGuess {
+    margin-bottom: 10px;
     display: grid;
     gap: 5px;
     grid-template-columns: 1fr 1fr;
-    max-height: 60px;
-}
-
-.bottom-half {
-    background-color: rgb(50, 50, 50);
+    height: 60px;
+    background-color: rgb(158, 158, 158);
 }
 
 .player-con {
     display: grid;
     gap: 5px;
     grid-template-columns: 1fr 0.2fr 0.2fr;
+    gap: 5px;
+
 }
 
+
 .player-name-con {
+    position: relative;
     font-size: 22px;
+
+}
+
+.playerImg {
+    width: 32px;
+    height: 32px;
+    position: absolute;
+}
+
+.hidden {
+    display: none;
 }
 
 .guess-con {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+}
+
+.n-o {
+    color: var(--red-number);
 }
 
 /* .single-num {
@@ -93,7 +121,7 @@ body {
     width: 100%;
     bottom: 0;
     position: absolute;
-    background-color: green;
+    /* background-color: green; */
     display: grid;
     gap: 5px;
     grid-template-columns: 75% 1fr;

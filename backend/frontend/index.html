@@ -20,39 +20,46 @@
         <div class="game-con">
             <div class="top-half">
                 <div class="player-one-con player-con">
-                    <div class="player-one-name-con player-name-con poppins-medium center">Player One</div>
+                    <img src="player.png" class="playerImg hidden" alt="">
+                    <div class="player-one-name-con player-name-con poppins-medium center">
+                        Player One
+                    </div>
                     <div class="player-one-n poppins-medium center">N</div>
                     <div class="player-one-n poppins-medium center">O</div>
                 </div>
                 <div class="player-two-con player-con">
+                    <img src="player.png" class="playerImg hidden" alt="">
                     <div class="player-two-name-con player-name-con poppins-medium center">Player Two</div>
                     <div class="player-two-n poppins-medium center">N</div>
                     <div class="player-two-n poppins-medium center">O</div>
                 </div>
             </div>
             <div class="bottom-half">
-                <div class="player-one-con player-con">
-                    <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
-                        <div class="single-num center">1</div>
-                        <div class="single-num center">5</div>
-                        <div class="single-num center">4</div>
-                        <div class="single-num center">3</div>
+                <div class="singleGuess">
+                    <div class="player-one-con player-con">
+                        <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
+                            <div class="single-num center">1</div>
+                            <div class="single-num center">5</div>
+                            <div class="single-num center">4</div>
+                            <div class="single-num center">3</div>
+                        </div>
+                        <div class="player-one-n poppins-medium center p1-number n-o">1</div>
+                        <div class="player-one-n poppins-medium center p1-order n-o">0</div>
                     </div>
-                    <div class="player-one-n poppins-medium center p1-number">1</div>
-                    <div class="player-one-n poppins-medium center p1-order">0</div>
-                </div>
-                <div class="player-two-con player-con">
+                    <div class="player-two-con player-con">
 
-                    <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
-                        <div class="single-num center">1</div>
-                        <div class="single-num center">5</div>
-                        <div class="single-num center">4</div>
-                        <div class="single-num center">3</div>
+                        <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
+                            <div class="single-num center">1</div>
+                            <div class="single-num center">5</div>
+                            <div class="single-num center">4</div>
+                            <div class="single-num center">3</div>
+                        </div>
+
+                        <div class="player-two-n poppins-medium center p2-number n-o">0</div>
+                        <div class="player-two-n poppins-medium center p2-order n-o">0</div>
                     </div>
-
-                    <div class="player-two-n poppins-medium center p1-number">0</div>
-                    <div class="player-two-n poppins-medium center p1-order">0</div>
                 </div>
+
             </div>
             <div class="bottom-action-cons">
                 <input type="number" placeholder="4 digit numbers" name="" id="" class="answer-input poppins-medium">
@@ -73,23 +80,37 @@
     <script>
         const answerInput = document.querySelector(".answer-input");
         let answer = 0;
+        let status = "join"
+        let canAddGuess = true;
 
 
 
-
+        const playerImg = document.querySelectorAll(".playerImg");
 
         const joinGameBtn = document.querySelector(".join-game");
         joinGameBtn.classList.add("btn-disabled");
 
 
         answerInput.addEventListener("input", () => {
-            const inputValue = answerInput.value; // Get the value of the input
-            answer = inputValue;
-            if (inputValue.toString().length < 4) {
-                joinGameBtn.classList.add("btn-disabled");
-            } else {
-                joinGameBtn.classList.remove("btn-disabled");
+            const inputValue = answerInput.value;
+            if (status === "join") {
 
+                answer = inputValue;
+                if (inputValue.toString().length < 4) {
+                    joinGameBtn.classList.add("btn-disabled");
+                } else {
+                    joinGameBtn.classList.remove("btn-disabled");
+
+                }
+            } else if (status === "joined") {
+                if (inputValue.toString().length > 3) {
+                    socket.emit('guessput', { roomId: roomId, playerName: playerName, guess: inputValue });
+
+
+
+                    answerInput.value = "";
+                }
+                console.log("Status is to send this numbers", inputValue)
             }
         });
 
@@ -98,6 +119,8 @@
         const resignGameBtn = document.querySelector(".resign-game");
         const statusText = document.querySelector(".status");
 
+
+        const singleGuessCon = document.querySelector(".bottom-half")
         const socket = io();
         let roomId = null;
         let playerName = null;
@@ -114,33 +137,48 @@
                 statusText.innerText = playerName + "waiting for a partner..."
                 joinGameBtn.classList.add("btn-waiting");
                 joinGameBtn.innerText = "waiting...";
+                playerImg[0].classList.remove("hidden")
+                status = "waiting"
 
             } else {
                 statusText.innerText = playerName + "Game Started"
                 joinGameBtn.classList.add("btn-started");
                 joinGameBtn.innerText = "Resign";
+                answerInput.value = "";
+
+                status = "joined"
+
+
+                playerImg[1].classList.remove("hidden")
 
             }
         });
 
 
         socket.on("gamestarted", (msg) => {
-            console.log(msg.roomId, roomId, "<--- this should be the same")
+
             if (msg.roomId == roomId) {
                 joinGameBtn.classList.remove("btn-waiting");
                 joinGameBtn.classList.add("btn-started");
                 joinGameBtn.innerText = "Resign";
+                answerInput.value = "";
+
+
+                status = "joined"
+
             }
         });
         socket.on("partnerleft", (msg) => {
             joinGameBtn.classList.remove("btn-started");
             joinGameBtn.classList.remove("btn-waiting");
 
+            playerImg[0].classList.add("hidden")
+            playerImg[1].classList.add("hidden")
+
             joinGameBtn.innerText = "Join Game";
+            status = "join"
 
             roomId = null;
-
-
         });
 
 
@@ -150,16 +188,19 @@
             joinGameBtn.classList.remove("btn-started");
             joinGameBtn.classList.remove("btn-waiting");
 
-            joinGameBtn.innerText = "Join Game";
+            playerImg[0].classList.add("hidden")
+            playerImg[1].classList.add("hidden")
 
+            joinGameBtn.innerText = "Join Game";
+            status = "join"
 
             roomId = null;
 
 
         });
 
-
-
+        "You are here and started seeing things"
+        // socket.on('historyUpdate', {})
 
 
         function handleJoinGame() {
@@ -168,6 +209,9 @@
                 socket.emit('joingame', "Hello ATP");
             } else if (joinGameBtn.innerText === "Resign") {
                 handleResignGame();
+                playerImg[0].classList.add("hidden")
+                playerImg[1].classList.add("hidden")
+
             } else {
                 console.log(joinGameBtn.innerText === "Resign", joinGameBtn.innerText)
             }
@@ -180,17 +224,47 @@
             joinGameBtn.classList.remove("btn-waiting");
 
             joinGameBtn.innerText = "Join Game";
+            status = "join"
             roomId = null;
+        }
 
 
+        function handleGamePlay() {
+
+        }
+        for (let i = 0; i < 1; i++) {
+            singleGuessCon.innerHTML += createSinglePlay();
+        }
+        function createSinglePlay(guess, number, order) {
+            return ` <div class="singleGuess">
+                    <div class="player-one-con player-con">
+                        <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
+                            <div class="single-num center">1</div>
+                            <div class="single-num center">5</div>
+                            <div class="single-num center">4</div>
+                            <div class="single-num center">3</div>
+                        </div>
+                        <div class="player-one-n poppins-medium center p1-number n-o">1</div>
+                        <div class="player-one-n poppins-medium center p1-order n-o">0</div>
+                    </div>
+                    <div class="player-two-con player-con">
+
+                        <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
+                            <div class="single-num center">1</div>
+                            <div class="single-num center">5</div>
+                            <div class="single-num center">4</div>
+                            <div class="single-num center">3</div>
+                        </div>
+
+                        <div class="player-two-n poppins-medium center p2-number n-o">0</div>
+                        <div class="player-two-n poppins-medium center p2-order n-o">0</div>
+                    </div>
+                </div>
+                `
         }
 
 
 
-        // Example for periodic socket emit (commented out):
-        // setInterval(() => {
-        //     socket.emit('chat message', "Hello world");
-        // }, 2000);
     </script>
 </body>
 
