@@ -61,6 +61,14 @@ body {
     border-radius: 2px;
 }
 
+.user-counter {
+    position: absolute;
+    color: var(--balck-border);
+    font-size: 22px;
+    top: 0;
+    right: 20px;
+}
+
 .player-time {
     bottom: 0;
     position: absolute;
@@ -187,11 +195,13 @@ body {
 
 .answer-input {
     -moz-appearance: textfield;
-    /* Firefox */
     -webkit-appearance: none;
-    /* Safari and Chrome */
     appearance: none;
-    /* Standard */
+
+}
+
+svg {
+    margin-left: 5px;
 }
 
 .answer-input::-webkit-outer-spin-button,

@@ -20,7 +20,7 @@ const io = new Server(server);
 
 const playerHistory = [];
 let currentRoom = getRandomId();
-
+let userCounter = 0;
 const rooms = {
     // 123456: {
     //     "playerOne": {
@@ -47,9 +47,13 @@ app.get('/', (req, res) => {
     res.sendFile(join(__dirname, '/frontend/index.html'));
 });
 
+
+
 io.on('connection', (socket) => {
     // here handle refresh for later
-    console.log('a user connected');
+
+    userCounter += 1;
+    io.emit("usercount", userCounter);
 
     socket.on('joingame', (msg) => {
         console.log('message: ' + msg);
@@ -91,7 +95,8 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('User with ID ' + socket.id + ' disconnected');
-
+        userCounter -= 1;
+        io.emit("usercount", userCounter);
 
         for (let roomKey in rooms) {
             const room = rooms[roomKey];
