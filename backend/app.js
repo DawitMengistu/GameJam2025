@@ -53,7 +53,7 @@ io.on('connection', (socket) => {
 
     socket.on('joingame', (msg) => {
         console.log('message: ' + msg);
-        const response = initializeNewGameRoom(socket.id, 1234, socket)
+        const response = initializeNewGameRoom(socket.id, msg.answer, socket)
         socket.emit("gamejoined", response);
         if (response.playerName === "Player Two") {
             setTimeout(() => {
@@ -121,13 +121,16 @@ io.on('connection', (socket) => {
 
 
     socket.on('guessput', (msg) => {
-        const { roomId, playerName, guess } = msg;
-
+        let { roomId, playerName, guess } = msg;
+        if (playerName === "Player One") playerName = "playerOne"
+        if (playerName === "Player Two") playerName = "playerTwo"
 
         if (rooms[roomId] && rooms[roomId][playerName]) {
             // Convert inputValue to an array of numbers and add it to the history
             const guessArray = guess.toString().split('').map(Number);
-            rooms[roomId][playerName].history = [...rooms[roomId][playerName].history, ...guessArray];
+            guessArray.push(1, 2)
+            rooms[roomId][playerName].history = [...rooms[roomId][playerName].history, guessArray];
+
 
             console.log(`Updated history for ${playerName} in room ${roomId}:`, rooms[roomId][playerName].history);
 
@@ -135,10 +138,17 @@ io.on('connection', (socket) => {
             const playerOneHistory = rooms[roomId].playerOne.history;
             const playerTwoHistory = rooms[roomId].playerTwo.history;
 
-            const historiesAreEqual = JSON.stringify(playerOneHistory) === JSON.stringify(playerTwoHistory);
+            const historiesAreEqual = playerOneHistory.length === playerTwoHistory.length;
 
             console.log(`Player histories are ${historiesAreEqual ? "equal" : "not equal"}`);
-            socket.emit('historyUpdate', { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
+
+            if (!historiesAreEqual)
+                socket.emit('historyUpdate', { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
+            else {
+                io.to(rooms[roomId].playerTwo.id).emit("historyUpdate", { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
+                io.to(rooms[roomId].playerOne.id).emit("historyUpdate", { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
+            }
+
         } else {
             console.log(`Invalid roomId or playerName: roomId=${roomId}, playerName=${playerName}`);
         }
