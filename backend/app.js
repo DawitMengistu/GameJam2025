@@ -53,7 +53,7 @@ io.on('connection', (socket) => {
 
     socket.on('joingame', (msg) => {
         console.log('message: ' + msg);
-        const response = initializeNewGameRoom(socket.id, 1234, socket)
+        const response = initializeNewGameRoom(socket.id, msg.answer, socket)
         socket.emit("gamejoined", response);
         if (response.playerName === "Player Two") {
             setTimeout(() => {
@@ -117,6 +117,83 @@ io.on('connection', (socket) => {
 
 
 
+    });
+
+    function calculateNumberOrder(guess, answer) {
+
+        console.log(guess, "<--- this is what the used guessed", answer, "<-- this is the answer of the other player")
+        // Convert guess to a string for digit-by-digit comparison
+        const guessStr = guess.toString();
+        const answerStr = answer; // Answer is already a string
+
+        // Initialize counters
+        let numberCorrect = 0; // Correct numbers
+        let orderCorrect = 0;  // Correct numbers in the correct order
+
+        // Loop through each digit in the guess
+        for (let i = 0; i < guessStr.length; i++) {
+            const digit = guessStr[i];
+
+            // Check if the digit is in the answer
+            if (answerStr.includes(digit)) {
+                numberCorrect++; // Increment for correct numbers
+
+                // Check if the digit is in the correct position
+                if (answerStr[i] === digit) {
+                    orderCorrect++; // Increment for correct numbers in the correct order
+                }
+            }
+        }
+
+        // Return the result as an array
+        return [numberCorrect, orderCorrect];
+    }
+
+    socket.on('guessput', (msg) => {
+        let { roomId, playerName, guess } = msg;
+        let otherPlayer = "";
+        if (playerName === "Player One") {
+            playerName = "playerOne"
+            otherPlayer = "playerTwo"
+        }
+        if (playerName === "Player Two") {
+            playerName = "playerTwo"
+            otherPlayer = "playerOne"
+        }
+
+        if (rooms[roomId] && rooms[roomId][playerName]) {
+            // Convert inputValue to an array of numbers and add it to the history
+            const guessArray = guess.toString().split('').map(Number);
+            const temp = calculateNumberOrder(guess, rooms[roomId][otherPlayer].answer)
+            guessArray.push(temp[0], temp[1]);
+            rooms[roomId][playerName].history = [...rooms[roomId][playerName].history, guessArray];
+
+
+            console.log(`Updated history for ${playerName} in room ${roomId}:`, rooms[roomId][playerName].history);
+
+            // Check if playerOne and playerTwo history are equal
+            const playerOneHistory = rooms[roomId].playerOne.history;
+            const playerTwoHistory = rooms[roomId].playerTwo.history;
+
+            const historiesAreEqual = playerOneHistory.length === playerTwoHistory.length;
+
+            console.log(`Player histories are ${historiesAreEqual ? "equal" : "not equal"}`);
+
+            if (!historiesAreEqual)
+                socket.emit('historyUpdate', { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
+            else {
+                io.to(rooms[roomId].playerTwo.id).emit("historyUpdate", { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
+                io.to(rooms[roomId].playerOne.id).emit("historyUpdate", { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
+            }
+
+            if (temp[0] === 4 && temp[1]) {
+                io.to(rooms[roomId].playerTwo.id).emit("gamewin", { roomId, winner: playerName });
+                io.to(rooms[roomId].playerOne.id).emit("gamewin", { roomId, winner: playerName });
+            }
+
+        } else {
+            console.log(`Invalid roomId or playerName: roomId=${roomId}, playerName=${playerName}`);
+        }
     });
 
 

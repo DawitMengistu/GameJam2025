@@ -17,42 +17,60 @@
 <body>
 
     <div class="con">
+
+
+        <div class="player-one-time-con player-time-con">
+            <div class="player-one-time player-time "></div>
+        </div>
         <div class="game-con">
+
+
+            <div class="player-won-con center hide">
+                <div class="you-won-text poppins-medium center">You Won!</div>
+            </div>
             <div class="top-half">
                 <div class="player-one-con player-con">
-                    <div class="player-one-name-con player-name-con poppins-medium center">Player One</div>
+
+                    <div class="player-one-name-con player-name-con poppins-medium center playerImg hidden">
+                        Player One
+                    </div>
                     <div class="player-one-n poppins-medium center">N</div>
                     <div class="player-one-n poppins-medium center">O</div>
                 </div>
                 <div class="player-two-con player-con">
-                    <div class="player-two-name-con player-name-con poppins-medium center">Player Two</div>
+
+                    <div class="player-two-name-con player-name-con poppins-medium center playerImg hidden">Player Two
+                    </div>
                     <div class="player-two-n poppins-medium center">N</div>
                     <div class="player-two-n poppins-medium center">O</div>
                 </div>
             </div>
             <div class="bottom-half">
-                <div class="player-one-con player-con">
-                    <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
-                        <div class="single-num center">1</div>
-                        <div class="single-num center">5</div>
-                        <div class="single-num center">4</div>
-                        <div class="single-num center">3</div>
+                <!-- <div class="singleGuess">
+                    <div class="player-one-con player-con">
+                        <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
+                            <div class="single-num center">1</div>
+                            <div class="single-num center">5</div>
+                            <div class="single-num center">4</div>
+                            <div class="single-num center">3</div>
+                        </div>
+                        <div class="player-one-n poppins-medium center p1-number n-o">1</div>
+                        <div class="player-one-n poppins-medium center p1-order n-o">0</div>
                     </div>
-                    <div class="player-one-n poppins-medium center p1-number">1</div>
-                    <div class="player-one-n poppins-medium center p1-order">0</div>
-                </div>
-                <div class="player-two-con player-con">
+                    <div class="player-two-con player-con">
 
-                    <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
-                        <div class="single-num center">1</div>
-                        <div class="single-num center">5</div>
-                        <div class="single-num center">4</div>
-                        <div class="single-num center">3</div>
+                        <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
+                            <div class="single-num center">1</div>
+                            <div class="single-num center">5</div>
+                            <div class="single-num center">4</div>
+                            <div class="single-num center">3</div>
+                        </div>
+
+                        <div class="player-two-n poppins-medium center p2-number n-o">0</div>
+                        <div class="player-two-n poppins-medium center p2-order n-o">0</div>
                     </div>
+                </div> -->
 
-                    <div class="player-two-n poppins-medium center p1-number">0</div>
-                    <div class="player-two-n poppins-medium center p1-order">0</div>
-                </div>
             </div>
             <div class="bottom-action-cons">
                 <input type="number" placeholder="4 digit numbers" name="" id="" class="answer-input poppins-medium">
@@ -62,6 +80,18 @@
 
             </div>
         </div>
+        <div class="player-two-time-con player-time-con">
+            <div class="player-two-time player-time "></div>
+        </div>
+
+        <div class="side-bar">
+            <div class="answer-con">
+                <div class="answer-text poppins-medium center">Your Number</div>
+                <div class="answer poppins-medium center">____</div>
+            </div>
+        </div>
+
+
 
     </div>
     <div class="status"></div>
@@ -71,25 +101,126 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+        const youWonCon = document.querySelector(".player-won-con")
+        const youWonText = document.querySelector(".you-won-text")
+        stopYouWon();
+
+        function showYouWon(text) {
+            youWonText.innerText = text;
+
+            youWonCon.classList.remove("hide");
+            youWonText.classList.add("animate-win-loss");
+        }
+        function stopYouWon() {
+            youWonCon.classList.add("hide");
+            youWonText.classList.remove("animate-win-loss");
+        }
+
+        const gameStartSound = new Audio('GameStart.mp3');
+        const gameOverSound = new Audio('GameOver.mp3');
+
+
+        let playerOneTime = document.querySelector(".player-one-time")
+        let playerTwoTime = document.querySelector(".player-two-time")
+
+        let playerOneTimeInterval;
+        let playerTwoTimeInterval;
+
+        function getRandomGuess() {
+            const digits = new Set();
+            while (digits.size < 4) {
+                const randomDigit = Math.floor(Math.random() * 10);
+                digits.add(randomDigit);
+            }
+            return Array.from(digits).join('');
+        }
+
+
+        function startPlayerOneTime() {
+            currentHeight = 600;
+            playerOneTimeInterval = setInterval(() => {
+                if (currentHeight > 4) {
+                    currentHeight -= 0.1;
+                    playerOneTime.style.height = `${currentHeight}px`; // Set the new height
+
+                } else {
+                    // alert("Time out!");
+                    clearInterval(playerOneTimeInterval);
+                    playerOneTimeInterval = null;
+                    const randomGuess = getRandomGuess();
+
+                    socket.emit('guessput', { roomId: roomId, playerName: playerName, guess: randomGuess });
+
+                }
+            }, 10);
+        }
+        function startPlayerTwoTime() {
+            currentHeight = 600;
+            playerTwoTimeInterval = setInterval(() => {
+                if (currentHeight > 4) {
+                    currentHeight -= 0.1;
+                    playerTwoTime.style.height = `${currentHeight}px`; // Set the new height
+
+                } else {
+                    clearInterval(playerTwoTimeInterval)
+                    playerTwoTimeInterval = null;
+                    const randomGuess = getRandomGuess();
+
+                    socket.emit('guessput', { roomId: roomId, playerName: playerName, guess: randomGuess });
+                }
+            }, 10);
+        }
+
+        function stopPlayerOneTime() {
+            clearInterval(playerOneTimeInterval)
+            playerOneTimeInterval = null;
+
+        }
+        function stopPlayerTwoTime() {
+            clearInterval(playerTwoTimeInterval)
+            playerOneTimeInterval = null;
+
+        }
+
+
+
+        const answerDiv = document.querySelector(".answer")
         const answerInput = document.querySelector(".answer-input");
         let answer = 0;
+        let status = "join"
+        let canAddGuess = true;
 
 
 
-
+        const playerImg = document.querySelectorAll(".playerImg");
 
         const joinGameBtn = document.querySelector(".join-game");
         joinGameBtn.classList.add("btn-disabled");
 
 
         answerInput.addEventListener("input", () => {
-            const inputValue = answerInput.value; // Get the value of the input
-            answer = inputValue;
-            if (inputValue.toString().length < 4) {
-                joinGameBtn.classList.add("btn-disabled");
-            } else {
-                joinGameBtn.classList.remove("btn-disabled");
+            const inputValue = answerInput.value;
+            if (status === "join") {
 
+                answer = inputValue;
+                if (inputValue.toString().length < 4) {
+                    joinGameBtn.classList.add("btn-disabled");
+                } else {
+                    joinGameBtn.classList.remove("btn-disabled");
+
+                }
+            } else if (status === "joined" && canAddGuess) {
+                if (inputValue.toString().length > 3) {
+                    socket.emit('guessput', { roomId: roomId, playerName: playerName, guess: inputValue });
+
+
+
+                    answerInput.value = "";
+
+                }
+                console.log("Status is to send this numbers", inputValue)
+            } else {
+                answerInput.value = "";
             }
         });
 
@@ -98,6 +229,8 @@
         const resignGameBtn = document.querySelector(".resign-game");
         const statusText = document.querySelector(".status");
 
+
+        const singleGuessCon = document.querySelector(".bottom-half")
         const socket = io();
         let roomId = null;
         let playerName = null;
@@ -114,33 +247,68 @@
                 statusText.innerText = playerName + "waiting for a partner..."
                 joinGameBtn.classList.add("btn-waiting");
                 joinGameBtn.innerText = "waiting...";
+                playerImg[0].classList.remove("hidden")
+                status = "waiting"
+                answerDiv.innerText = answer;
+
+                stopYouWon();
 
             } else {
                 statusText.innerText = playerName + "Game Started"
                 joinGameBtn.classList.add("btn-started");
                 joinGameBtn.innerText = "Resign";
+                answerInput.value = "";
+                answerDiv.innerText = answer;
+
+                gameStartSound.play();
+                stopYouWon();
+                status = "joined"
+
+
+                playerImg[1].classList.remove("hidden")
 
             }
         });
 
 
         socket.on("gamestarted", (msg) => {
-            console.log(msg.roomId, roomId, "<--- this should be the same")
+
             if (msg.roomId == roomId) {
                 joinGameBtn.classList.remove("btn-waiting");
                 joinGameBtn.classList.add("btn-started");
                 joinGameBtn.innerText = "Resign";
+                answerInput.value = "";
+                answerDiv.innerText = answer;
+
+                gameStartSound.play();
+                stopYouWon();
+                if (playerName == "Player One") {
+                    startPlayerOneTime();
+                } else {
+                    startPlayerTwoTime();
+                }
+                answerInput.focus();
+
+                status = "joined"
+
             }
         });
         socket.on("partnerleft", (msg) => {
             joinGameBtn.classList.remove("btn-started");
             joinGameBtn.classList.remove("btn-waiting");
 
+            playerImg[0].classList.add("hidden")
+            playerImg[1].classList.add("hidden")
+
             joinGameBtn.innerText = "Join Game";
-
+            answerDiv.innerText = "____";
+            status = "join"
+            playerName = null;
+            canAddGuess = true;
+            answer = 0;
+            joinGameBtn.classList.add("btn-disabled");
+            gameStartSound.play();
             roomId = null;
-
-
         });
 
 
@@ -150,24 +318,58 @@
             joinGameBtn.classList.remove("btn-started");
             joinGameBtn.classList.remove("btn-waiting");
 
-            joinGameBtn.innerText = "Join Game";
+            playerImg[0].classList.add("hidden")
+            playerImg[1].classList.add("hidden")
 
+            joinGameBtn.innerText = "Join Game";
+            answerDiv.innerText = "____";
+
+            status = "join"
+            playerName = null;
+            canAddGuess = true;
+            answer = 0;
+            joinGameBtn.classList.add("btn-disabled");
 
             roomId = null;
+            singleGuessCon.innerHTML = "";
 
 
         });
 
+        socket.on('historyUpdate', (msg) => {
+            canAddGuess = msg.historiesAreEqual;
 
+            renderResults(msg.playerOneHistory, msg.playerTwoHistory)
 
+            if (canAddGuess) {
+                if (playerName == "Player One") {
+                    stopPlayerOneTime();
+                    startPlayerOneTime();
+                } else {
+                    stopPlayerTwoTime();
+                    startPlayerTwoTime();
+                }
+            } else {
+                if (playerName == "Player One") {
+                    stopPlayerOneTime();
+                } else {
+                    stopPlayerTwoTime();
+                }
+            }
+        })
 
 
         function handleJoinGame() {
 
             if (answer.toString().length > 3 && roomId == null) {
-                socket.emit('joingame', "Hello ATP");
+                socket.emit('joingame', { answer: answer });
             } else if (joinGameBtn.innerText === "Resign") {
                 handleResignGame();
+                playerImg[0].classList.add("hidden")
+                playerImg[1].classList.add("hidden")
+                joinGameBtn.classList.add("btn-disabled");
+                answer = 0;
+
             } else {
                 console.log(joinGameBtn.innerText === "Resign", joinGameBtn.innerText)
             }
@@ -175,22 +377,104 @@
 
         function handleResignGame() {
             socket.emit('resigngame', { roomId: roomId, playerName: playerName });
-
+            gameStartSound.play();
             joinGameBtn.classList.remove("btn-started");
             joinGameBtn.classList.remove("btn-waiting");
 
             joinGameBtn.innerText = "Join Game";
+            answerDiv.innerText = "____";
+            status = "join"
             roomId = null;
+            playerName = null;
+            canAddGuess = true;
 
-
+            answer = 0;
         }
 
 
 
-        // Example for periodic socket emit (commented out):
-        // setInterval(() => {
-        //     socket.emit('chat message', "Hello world");
-        // }, 2000);
+        function renderResults(playerOneHistory, playerTwoHistory) {
+            const maxRounds = Math.max(playerOneHistory.length, playerTwoHistory.length);
+            singleGuessCon.innerHTML = "";
+
+            for (let i = 0; i < maxRounds; i++) {
+                const p1 = playerOneHistory[i] || [];
+                const p2 = playerTwoHistory[i] || [];
+
+
+                console.log(p1, p2, "<-- this is the number and order")
+                singleGuessCon.innerHTML += singleRound(p1, p2);
+            }
+        }
+
+
+
+        function singleRound(p1, p2) {
+            return ` <div class="singleGuess">
+                    <div class="player-one-con player-con">
+                        <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
+                            <div class="single-num center">${(p1.length && p1[0].toString()) || ""}</div>
+                            <div class="single-num center">${(p1.length && p1[1].toString()) || ""}</div>
+                            <div class="single-num center">${(p1.length && p1[2].toString()) || ""}</div>
+                            <div class="single-num center">${(p1.length && p1[3].toString()) || ""}</div>
+                        </div>
+                        <div class="player-one-n poppins-medium center p1-number n-o">${(p1.length && p1[4].toString()) || ""}</div>
+                        <div class="player-one-n poppins-medium center p1-order n-o">${(p1.length && p1[5].toString()) || ""}</div>
+                    </div>
+                    <div class="player-two-con player-con">
+
+                        <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
+                            <div class="single-num center">${(p2.length && p2[0].toString()) || ""}</div>
+                            <div class="single-num center">${(p2.length && p2[1].toString()) || ""}</div>
+                            <div class="single-num center">${(p2.length && p2[2].toString()) || ""}</div>
+                            <div class="single-num center">${(p2.length && p2[3].toString()) || ""}</div>
+                        </div>
+
+                        <div class="player-two-n poppins-medium center p2-number n-o">${(p2.length && p2[4].toString()) || ""}</div>
+                        <div class="player-two-n poppins-medium center p2-order n-o">${(p2.length && p2[5].toString()) || ""}</div>
+                    </div>
+                </div>
+                `
+        }
+
+        // startPlayerOneTime();
+
+        socket.on('gamewin', (msg) => {
+            gameOverSound.play();
+            let tmpName = "Player One";
+
+            if (msg.winner === "playerTwo") {
+                tmpName = "Player Two";
+            }
+            if (tmpName === playerName) {
+
+                showYouWon("You Won!");
+            } else {
+
+                showYouWon("You Lost");
+            }
+
+            stopPlayerOneTime();
+            stopPlayerTwoTime();
+            joinGameBtn.classList.remove("btn-started");
+            joinGameBtn.classList.remove("btn-waiting");
+
+            playerImg[0].classList.add("hidden")
+            playerImg[1].classList.add("hidden")
+
+            joinGameBtn.innerText = "Join Game";
+            answerDiv.innerText = "____";
+
+            status = "join"
+            playerName = null;
+            canAddGuess = true;
+            answer = 0;
+            joinGameBtn.classList.add("btn-disabled");
+            singleGuessCon.innerHTML = "";
+
+            roomId = null;
+        });
+
     </script>
 </body>
 

@@ -2,7 +2,9 @@
     --green-main: #6c9a4c;
     --blue-main: #5b69a6;
     --red-main: #ad5a4a;
+    --red-number: #000000;
     --green-hovered: #608446;
+    --balck-border: #3b3b3b;
 }
 
 body {
@@ -10,14 +12,15 @@ body {
     height: 100vh;
     color: white;
     font-size: 20px;
-
+    overflow: hidden;
 }
+
+
 
 .center {
     display: grid;
     align-items: center;
     justify-content: center;
-    background-color: palegreen;
 }
 
 .con {
@@ -26,13 +29,14 @@ body {
     display: grid;
     align-items: center;
     justify-content: center;
+    grid-template-columns: auto auto auto auto;
 
 }
 
 .game-con {
     width: 600px;
-    height: 80%;
-    background-color: plum;
+    height: 600px;
+    background-color: white;
     margin-bottom: 10px;
     display: grid;
     grid-template-rows: 60px auto;
@@ -40,41 +44,110 @@ body {
 
 
     position: relative;
+}
 
+.side-bar {
+    width: 250px;
+    height: 600px;
+    border: solid 2px var(--balck-border);
+}
+
+.player-time-con {
+    margin: 10px;
+    width: 28px;
+    height: 600px;
+    background-color: var(--balck-border);
+    position: relative;
+    border-radius: 2px;
+}
+
+.player-time {
+    bottom: 0;
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    background-color: var(--green-main);
+}
+
+.answer-text {
+    height: 55px;
+    color: var(--balck-border);
+    margin-bottom: 10px;
+    border-bottom: var(--balck-border) 2px solid;
+}
+
+.answer {
+    font-size: 22px;
+    letter-spacing: 20px;
+    height: 60px;
+    color: var(--balck-border);
 }
 
 .top-half {
-    background-color: gray;
+    color: var(--balck-border);
     display: grid;
     gap: 5px;
     grid-template-columns: 1fr 1fr;
+    border: 2px solid var(--balck-border);
+    border-radius: 5px;
 }
 
+
 .bottom-half {
-    background-color: gray;
+    width: 100%;
+    overflow-y: scroll;
+    height: calc(100% - 80px);
+
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    /* For Firefox */
+    -ms-overflow-style: none;
+    /* For Internet Explorer and Edge */
+}
+
+.bottom-half::-webkit-scrollbar {
+    display: none;
+    /* For Chrome, Safari, and Opera */
+}
+
+
+.singleGuess {
+    margin-bottom: 10px;
     display: grid;
     gap: 5px;
     grid-template-columns: 1fr 1fr;
-    max-height: 60px;
-}
-
-.bottom-half {
-    background-color: rgb(50, 50, 50);
+    height: 60px;
+    background-color: rgb(158, 158, 158);
 }
 
 .player-con {
     display: grid;
     gap: 5px;
     grid-template-columns: 1fr 0.2fr 0.2fr;
+    gap: 5px;
+
 }
 
+
 .player-name-con {
+    position: relative;
     font-size: 22px;
+
+}
+
+
+.hidden {
+    color: #b5b5b5;
 }
 
 .guess-con {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+}
+
+.n-o {
+    color: var(--red-number);
 }
 
 /* .single-num {
@@ -93,7 +166,7 @@ body {
     width: 100%;
     bottom: 0;
     position: absolute;
-    background-color: green;
+    /* background-color: green; */
     display: grid;
     gap: 5px;
     grid-template-columns: 75% 1fr;
@@ -168,4 +241,36 @@ body {
 .btn-disabled {
     cursor: not-allowed;
     background-color: gray;
+}
+
+.player-won-con {
+    position: absolute;
+    width: 100%;
+    height: 60%;
+    color: var(--balck-border);
+}
+
+.you-won-text {
+    font-size: 40px;
+}
+
+.animate-win-loss {
+    animation: animateText 600ms ease-out forwards;
+}
+
+.hide {
+    display: none;
+    visibility: none;
+}
+
+@keyframes animateText {
+    0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.9);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
