@@ -29,6 +29,7 @@ body {
     display: grid;
     align-items: center;
     justify-content: center;
+    grid-template-columns: auto auto auto auto;
 
 }
 
@@ -43,7 +44,43 @@ body {
 
 
     position: relative;
+}
 
+.side-bar {
+    width: 250px;
+    height: 600px;
+    border: solid 2px var(--balck-border);
+}
+
+.player-time-con {
+    margin: 10px;
+    width: 28px;
+    height: 600px;
+    background-color: purple;
+    position: relative;
+    border-radius: 2px;
+}
+
+.player-time {
+    bottom: 0;
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    background-color: var(--green-main);
+}
+
+.answer-text {
+    height: 55px;
+    color: var(--balck-border);
+    margin-bottom: 10px;
+    border-bottom: var(--balck-border) 2px solid;
+}
+
+.answer {
+    font-size: 22px;
+    letter-spacing: 20px;
+    height: 60px;
+    color: var(--balck-border);
 }
 
 .top-half {
@@ -51,7 +88,8 @@ body {
     display: grid;
     gap: 5px;
     grid-template-columns: 1fr 1fr;
-    border-bottom: 2px solid var(--balck-border);
+    border: 2px solid var(--balck-border);
+    border-radius: 5px;
 }
 
 
@@ -59,7 +97,19 @@ body {
     width: 100%;
     overflow-y: scroll;
     height: calc(100% - 80px);
+
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    /* For Firefox */
+    -ms-overflow-style: none;
+    /* For Internet Explorer and Edge */
 }
+
+.bottom-half::-webkit-scrollbar {
+    display: none;
+    /* For Chrome, Safari, and Opera */
+}
+
 
 .singleGuess {
     margin-bottom: 10px;
@@ -85,14 +135,9 @@ body {
 
 }
 
-.playerImg {
-    width: 32px;
-    height: 32px;
-    position: absolute;
-}
 
 .hidden {
-    display: none;
+    color: #b5b5b5;
 }
 
 .guess-con {

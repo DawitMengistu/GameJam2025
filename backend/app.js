@@ -119,16 +119,53 @@ io.on('connection', (socket) => {
 
     });
 
+    function calculateNumberOrder(guess, answer) {
+
+        console.log(guess, "<--- this is what the used guessed", answer, "<-- this is the answer of the other player")
+        // Convert guess to a string for digit-by-digit comparison
+        const guessStr = guess.toString();
+        const answerStr = answer; // Answer is already a string
+
+        // Initialize counters
+        let numberCorrect = 0; // Correct numbers
+        let orderCorrect = 0;  // Correct numbers in the correct order
+
+        // Loop through each digit in the guess
+        for (let i = 0; i < guessStr.length; i++) {
+            const digit = guessStr[i];
+
+            // Check if the digit is in the answer
+            if (answerStr.includes(digit)) {
+                numberCorrect++; // Increment for correct numbers
+
+                // Check if the digit is in the correct position
+                if (answerStr[i] === digit) {
+                    orderCorrect++; // Increment for correct numbers in the correct order
+                }
+            }
+        }
+
+        // Return the result as an array
+        return [numberCorrect, orderCorrect];
+    }
 
     socket.on('guessput', (msg) => {
         let { roomId, playerName, guess } = msg;
-        if (playerName === "Player One") playerName = "playerOne"
-        if (playerName === "Player Two") playerName = "playerTwo"
+        let otherPlayer = "";
+        if (playerName === "Player One") {
+            playerName = "playerOne"
+            otherPlayer = "playerTwo"
+        }
+        if (playerName === "Player Two") {
+            playerName = "playerTwo"
+            otherPlayer = "playerOne"
+        }
 
         if (rooms[roomId] && rooms[roomId][playerName]) {
             // Convert inputValue to an array of numbers and add it to the history
             const guessArray = guess.toString().split('').map(Number);
-            guessArray.push(1, 2)
+            const temp = calculateNumberOrder(guess, rooms[roomId][otherPlayer].answer)
+            guessArray.push(temp[0], temp[1]);
             rooms[roomId][playerName].history = [...rooms[roomId][playerName].history, guessArray];
 
 
@@ -147,6 +184,11 @@ io.on('connection', (socket) => {
             else {
                 io.to(rooms[roomId].playerTwo.id).emit("historyUpdate", { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
                 io.to(rooms[roomId].playerOne.id).emit("historyUpdate", { roomId, playerOneHistory, playerTwoHistory, historiesAreEqual });
+            }
+
+            if (temp[0] === 4 && temp[1]) {
+                io.to(rooms[roomId].playerTwo.id).emit("gamewin", { roomId, winner: playerName });
+                io.to(rooms[roomId].playerOne.id).emit("gamewin", { roomId, winner: playerName });
             }
 
         } else {
