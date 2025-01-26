@@ -17,12 +17,17 @@
 <body>
 
     <div class="con">
+
+
         <div class="player-one-time-con player-time-con">
             <div class="player-one-time player-time "></div>
         </div>
         <div class="game-con">
 
 
+            <div class="player-won-con center hide">
+                <div class="you-won-text poppins-medium center">You Won!</div>
+            </div>
             <div class="top-half">
                 <div class="player-one-con player-con">
 
@@ -96,6 +101,25 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
+        const youWonCon = document.querySelector(".player-won-con")
+        const youWonText = document.querySelector(".you-won-text")
+        stopYouWon();
+
+        function showYouWon(text) {
+            youWonText.innerText = text;
+
+            youWonCon.classList.remove("hide");
+            youWonText.classList.add("animate-win-loss");
+        }
+        function stopYouWon() {
+            youWonCon.classList.add("hide");
+            youWonText.classList.remove("animate-win-loss");
+        }
+
+        const gameStartSound = new Audio('GameStart.mp3');
+        const gameOverSound = new Audio('GameOver.mp3');
+
+
         let playerOneTime = document.querySelector(".player-one-time")
         let playerTwoTime = document.querySelector(".player-two-time")
 
@@ -116,7 +140,7 @@
             currentHeight = 600;
             playerOneTimeInterval = setInterval(() => {
                 if (currentHeight > 4) {
-                    currentHeight -= 0.01;
+                    currentHeight -= 0.1;
                     playerOneTime.style.height = `${currentHeight}px`; // Set the new height
 
                 } else {
@@ -134,7 +158,7 @@
             currentHeight = 600;
             playerTwoTimeInterval = setInterval(() => {
                 if (currentHeight > 4) {
-                    currentHeight -= 0.01;
+                    currentHeight -= 0.1;
                     playerTwoTime.style.height = `${currentHeight}px`; // Set the new height
 
                 } else {
@@ -227,6 +251,8 @@
                 status = "waiting"
                 answerDiv.innerText = answer;
 
+                stopYouWon();
+
             } else {
                 statusText.innerText = playerName + "Game Started"
                 joinGameBtn.classList.add("btn-started");
@@ -234,6 +260,8 @@
                 answerInput.value = "";
                 answerDiv.innerText = answer;
 
+                gameStartSound.play();
+                stopYouWon();
                 status = "joined"
 
 
@@ -252,7 +280,8 @@
                 answerInput.value = "";
                 answerDiv.innerText = answer;
 
-
+                gameStartSound.play();
+                stopYouWon();
                 if (playerName == "Player One") {
                     startPlayerOneTime();
                 } else {
@@ -278,7 +307,7 @@
             canAddGuess = true;
             answer = 0;
             joinGameBtn.classList.add("btn-disabled");
-
+            gameStartSound.play();
             roomId = null;
         });
 
@@ -348,7 +377,7 @@
 
         function handleResignGame() {
             socket.emit('resigngame', { roomId: roomId, playerName: playerName });
-
+            gameStartSound.play();
             joinGameBtn.classList.remove("btn-started");
             joinGameBtn.classList.remove("btn-waiting");
 
@@ -411,15 +440,18 @@
         // startPlayerOneTime();
 
         socket.on('gamewin', (msg) => {
+            gameOverSound.play();
             let tmpName = "Player One";
 
             if (msg.winner === "playerTwo") {
                 tmpName = "Player Two";
             }
             if (tmpName === playerName) {
-                alert("You Won!")
+
+                showYouWon("You Won!");
             } else {
-                alert("You Lost!")
+
+                showYouWon("You Lost");
             }
 
             stopPlayerOneTime();

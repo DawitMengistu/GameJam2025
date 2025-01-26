@@ -56,7 +56,7 @@ body {
     margin: 10px;
     width: 28px;
     height: 600px;
-    background-color: purple;
+    background-color: var(--balck-border);
     position: relative;
     border-radius: 2px;
 }
@@ -241,4 +241,36 @@ body {
 .btn-disabled {
     cursor: not-allowed;
     background-color: gray;
+}
+
+.player-won-con {
+    position: absolute;
+    width: 100%;
+    height: 60%;
+    color: var(--balck-border);
+}
+
+.you-won-text {
+    font-size: 40px;
+}
+
+.animate-win-loss {
+    animation: animateText 600ms ease-out forwards;
+}
+
+.hide {
+    display: none;
+    visibility: none;
+}
+
+@keyframes animateText {
+    0% {
+        opacity: 0;
+        transform: translateY(20px) scale(0.9);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
