@@ -80,7 +80,7 @@
 
             </div>
             <div class="bottom-action-cons">
-                <input type="number" placeholder="4 digit numbers" name="" id="" class="answer-input poppins-medium">
+                <input type="number" placeholder="enter 4 digit numbers" name="" id="" class="answer-input poppins-medium">
 
                 <button class="bottom-btn poppins-medium join-game" onclick="handleJoinGame()">Join Game</button>
 
@@ -210,13 +210,19 @@
 
 
         answerInput.addEventListener("input", () => {
-            const inputValue = answerInput.value;
+            let inputValue = answerInput.value;
             if (status === "join") {
+                if(inputValue.toString().length > 4){
+                     let newValue = ((answerInput.value).toString()).slice(0, -1);
+                     answerInput.value =  (newValue)
+                }
 
                 answer = inputValue;
                 if (inputValue.toString().length < 4) {
                     joinGameBtn.classList.add("btn-disabled");
+                    
                 } else {
+
                     joinGameBtn.classList.remove("btn-disabled");
 
                 }
