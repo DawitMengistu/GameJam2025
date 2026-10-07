@@ -10,499 +10,121 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Varela+Round&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
         rel="stylesheet">
 </head>
 
 <body>
-    <div class="user-counter poppins-medium">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="black" class="bi bi-people-fill"
-            viewBox="0 0 16 16">
+    <div class="user-counter poppins-medium" id="user-counter" aria-live="polite">
+        <span id="user-count-num">0</span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
             <path
                 d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
         </svg>
-        0
     </div>
-    <div class="con">
 
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
 
-        <div class="player-one-time-con player-time-con">
-            <div class="player-one-time player-time "></div>
+    <!-- LOBBY -->
+    <section id="screen-lobby" class="screen screen-lobby">
+        <div class="lobby-card">
+            <h1 class="brand poppins-semibold">ATP</h1>
+            <p class="lobby-tagline poppins-regular">Crack your opponent’s number. No zeros. No repeats.</p>
+
+            <div class="lobby-actions">
+                <button type="button" id="btn-create" class="btn btn-primary poppins-medium">Create Room</button>
+
+                <div class="lobby-divider poppins-regular"><span>or join with a code</span></div>
+
+                <div class="join-row">
+                    <input type="text" id="join-code-input" class="text-input poppins-medium"
+                        placeholder="Room code" maxlength="6" autocomplete="off" spellcheck="false">
+                    <button type="button" id="btn-join" class="btn btn-secondary poppins-medium">Join</button>
+                </div>
+            </div>
+
+            <p class="rules-hint poppins-regular">4 digits · 1–9 only · each digit once</p>
         </div>
-        <div class="game-con">
+    </section>
 
-
-            <div class="player-won-con center hide">
-                <div class="you-won-text poppins-medium center">You Won!</div>
+    <!-- WAITING / SHARE CODE -->
+    <section id="screen-waiting" class="screen screen-waiting hide">
+        <div class="lobby-card">
+            <h2 class="screen-title poppins-semibold">Your room</h2>
+            <p class="status-line poppins-regular" id="waiting-status">Share this code with a friend</p>
+            <div class="code-display">
+                <span id="room-code-text" class="room-code poppins-semibold">------</span>
+                <button type="button" id="btn-copy-code" class="btn btn-ghost poppins-medium">Copy</button>
             </div>
-            <div class="top-half">
-                <div class="player-one-con player-con">
+            <button type="button" id="btn-leave-waiting" class="btn btn-danger poppins-medium">Leave</button>
+        </div>
+    </section>
 
-                    <div class="player-one-name-con player-name-con poppins-medium center playerImg hidden">
-                        Player One
-                    </div>
-                    <div class="player-one-n poppins-medium center">N</div>
-                    <div class="player-one-n poppins-medium center">O</div>
-                </div>
-                <div class="player-two-con player-con">
+    <!-- SECRET SETUP -->
+    <section id="screen-secret" class="screen screen-secret hide">
+        <div class="lobby-card">
+            <h2 class="screen-title poppins-semibold">Set your secret</h2>
+            <p class="status-line poppins-regular" id="secret-status">Enter a 4-digit number (no 0, no repeats)</p>
+            <input type="text" id="secret-input" class="text-input text-input-lg poppins-medium"
+                inputmode="numeric" pattern="[1-9]*" maxlength="4" placeholder="e.g. 5821" autocomplete="off">
+            <button type="button" id="btn-set-secret" class="btn btn-primary poppins-medium" disabled>Lock in</button>
+            <button type="button" id="btn-leave-secret" class="btn btn-ghost poppins-medium">Leave room</button>
+        </div>
+    </section>
 
-                    <div class="player-two-name-con player-name-con poppins-medium center playerImg hidden">Player Two
-                    </div>
-                    <div class="player-two-n poppins-medium center">N</div>
-                    <div class="player-two-n poppins-medium center">O</div>
-                </div>
+    <!-- PLAY -->
+    <section id="screen-play" class="screen screen-play hide">
+        <div class="play-shell">
+            <div class="player-one-time-con player-time-con" aria-hidden="true">
+                <div class="player-one-time player-time"></div>
             </div>
-            <div class="bottom-half">
-                <!-- <div class="singleGuess">
+
+            <div class="game-con">
+                <div class="player-won-con center hide" id="win-overlay">
+                    <div class="you-won-text poppins-semibold center" id="win-text">You Won!</div>
+                </div>
+
+                <p class="play-status poppins-medium" id="play-status">Your turn</p>
+
+                <div class="top-half">
                     <div class="player-one-con player-con">
-                        <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
-                            <div class="single-num center">1</div>
-                            <div class="single-num center">5</div>
-                            <div class="single-num center">4</div>
-                            <div class="single-num center">3</div>
-                        </div>
-                        <div class="player-one-n poppins-medium center p1-number n-o">1</div>
-                        <div class="player-one-n poppins-medium center p1-order n-o">0</div>
+                        <div class="player-one-name-con player-name-con poppins-medium center" id="p1-label">Player One</div>
+                        <div class="player-one-n poppins-medium center">N</div>
+                        <div class="player-one-n poppins-medium center">O</div>
                     </div>
                     <div class="player-two-con player-con">
-
-                        <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
-                            <div class="single-num center">1</div>
-                            <div class="single-num center">5</div>
-                            <div class="single-num center">4</div>
-                            <div class="single-num center">3</div>
-                        </div>
-
-                        <div class="player-two-n poppins-medium center p2-number n-o">0</div>
-                        <div class="player-two-n poppins-medium center p2-order n-o">0</div>
+                        <div class="player-two-name-con player-name-con poppins-medium center" id="p2-label">Player Two</div>
+                        <div class="player-two-n poppins-medium center">N</div>
+                        <div class="player-two-n poppins-medium center">O</div>
                     </div>
-                </div> -->
+                </div>
 
+                <div class="bottom-half" id="history-board"></div>
+
+                <div class="bottom-action-cons">
+                    <input type="text" id="guess-input" class="answer-input poppins-medium"
+                        inputmode="numeric" maxlength="4" placeholder="Your guess" autocomplete="off">
+                    <button type="button" id="btn-resign" class="bottom-btn btn-started poppins-medium">Resign</button>
+                </div>
             </div>
-            <div class="bottom-action-cons">
-                <input type="number" placeholder="enter 4 digit numbers" name="" id="" class="answer-input poppins-medium">
 
-                <button class="bottom-btn poppins-medium join-game" onclick="handleJoinGame()">Join Game</button>
-
-
+            <div class="player-two-time-con player-time-con" aria-hidden="true">
+                <div class="player-two-time player-time"></div>
             </div>
+
+            <aside class="side-bar">
+                <div class="answer-con">
+                    <div class="answer-text poppins-medium center">Your Number</div>
+                    <div class="answer poppins-medium center" id="my-secret-display">____</div>
+                </div>
+                <p class="side-meta poppins-regular" id="side-room">Room —</p>
+                <p class="side-meta poppins-regular" id="side-role">—</p>
+            </aside>
         </div>
-        <div class="player-two-time-con player-time-con">
-            <div class="player-two-time player-time "></div>
-        </div>
-
-        <div class="side-bar">
-            <div class="answer-con">
-                <div class="answer-text poppins-medium center">Your Number</div>
-                <div class="answer poppins-medium center">____</div>
-            </div>
-        </div>
-
-
-
-    </div>
-    <div class="status"></div>
-    <!-- 
-    <button onclick="handleJoinGame()" class="join-game">Join Game</button>
-    <button onclick="handleResignGame()" class="resign-game">Resign</button> -->
+    </section>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script>
-
-
-
-
-        const youWonCon = document.querySelector(".player-won-con")
-        const youWonText = document.querySelector(".you-won-text")
-        stopYouWon();
-
-        function showYouWon(text) {
-            youWonText.innerText = text;
-
-            youWonCon.classList.remove("hide");
-            youWonText.classList.add("animate-win-loss");
-        }
-        function stopYouWon() {
-            youWonCon.classList.add("hide");
-            youWonText.classList.remove("animate-win-loss");
-        }
-
-        const gameStartSound = new Audio('GameStart.mp3');
-        const gameOverSound = new Audio('GameOver.mp3');
-
-
-        let playerOneTime = document.querySelector(".player-one-time")
-        let playerTwoTime = document.querySelector(".player-two-time")
-
-        let playerOneTimeInterval;
-        let playerTwoTimeInterval;
-
-        function getRandomGuess() {
-            const digits = new Set();
-            while (digits.size < 4) {
-                const randomDigit = Math.floor(Math.random() * 10);
-                digits.add(randomDigit);
-            }
-            return Array.from(digits).join('');
-        }
-
-
-        function startPlayerOneTime() {
-            currentHeight = 600;
-            playerOneTimeInterval = setInterval(() => {
-                if (currentHeight > 4) {
-                    currentHeight -= 0.1;
-                    playerOneTime.style.height = `${currentHeight}px`; // Set the new height
-
-                } else {
-                    // alert("Time out!");
-                    clearInterval(playerOneTimeInterval);
-                    playerOneTimeInterval = null;
-                    const randomGuess = getRandomGuess();
-
-                    socket.emit('guessput', { roomId: roomId, playerName: playerName, guess: randomGuess });
-
-                }
-            }, 10);
-        }
-        function startPlayerTwoTime() {
-            currentHeight = 600;
-            playerTwoTimeInterval = setInterval(() => {
-                if (currentHeight > 4) {
-                    currentHeight -= 0.1;
-                    playerTwoTime.style.height = `${currentHeight}px`; // Set the new height
-
-                } else {
-                    clearInterval(playerTwoTimeInterval)
-                    playerTwoTimeInterval = null;
-                    const randomGuess = getRandomGuess();
-
-                    socket.emit('guessput', { roomId: roomId, playerName: playerName, guess: randomGuess });
-                }
-            }, 10);
-        }
-
-        function stopPlayerOneTime() {
-            clearInterval(playerOneTimeInterval)
-            playerOneTimeInterval = null;
-
-        }
-        function stopPlayerTwoTime() {
-            clearInterval(playerTwoTimeInterval)
-            playerOneTimeInterval = null;
-
-        }
-
-
-
-        const answerDiv = document.querySelector(".answer")
-        const answerInput = document.querySelector(".answer-input");
-        let answer = 0;
-        let status = "join"
-        let canAddGuess = true;
-
-
-
-        const playerImg = document.querySelectorAll(".playerImg");
-
-        const joinGameBtn = document.querySelector(".join-game");
-        joinGameBtn.classList.add("btn-disabled");
-
-
-        answerInput.addEventListener("input", () => {
-            let inputValue = answerInput.value;
-            if (status === "join") {
-                if(inputValue.toString().length > 4){
-                     let newValue = ((answerInput.value).toString()).slice(0, -1);
-                     answerInput.value =  (newValue)
-                }
-
-                answer = inputValue;
-                if (inputValue.toString().length < 4) {
-                    joinGameBtn.classList.add("btn-disabled");
-                    
-                } else {
-
-                    joinGameBtn.classList.remove("btn-disabled");
-
-                }
-            } else if (status === "joined" && canAddGuess) {
-                if (inputValue.toString().length > 3) {
-                    socket.emit('guessput', { roomId: roomId, playerName: playerName, guess: inputValue });
-
-
-
-                    answerInput.value = "";
-
-                }
-                console.log("Status is to send this numbers", inputValue)
-            } else {
-                answerInput.value = "";
-            }
-        });
-
-
-
-        const resignGameBtn = document.querySelector(".resign-game");
-        const statusText = document.querySelector(".status");
-
-
-        const singleGuessCon = document.querySelector(".bottom-half")
-        const socket = io();
-        let roomId = null;
-        let playerName = null;
-        statusText.innerText = "Join"
-
-
-
-        socket.on("gamejoined", (msg) => {
-
-            roomId = msg.roomId;
-            playerName = msg.playerName;
-
-            if (playerName == "Player One") {
-                statusText.innerText = playerName + "waiting for a partner..."
-                joinGameBtn.classList.add("btn-waiting");
-                joinGameBtn.innerText = "waiting...";
-                playerImg[0].classList.remove("hidden")
-                status = "waiting"
-                answerDiv.innerText = answer;
-
-                stopYouWon();
-
-            } else {
-                statusText.innerText = playerName + "Game Started"
-                joinGameBtn.classList.add("btn-started");
-                joinGameBtn.innerText = "Resign";
-                answerInput.value = "";
-                answerDiv.innerText = answer;
-
-                gameStartSound.play();
-                stopYouWon();
-                status = "joined"
-
-
-                playerImg[1].classList.remove("hidden")
-
-            }
-        });
-
-
-        socket.on("gamestarted", (msg) => {
-
-            if (msg.roomId == roomId) {
-                joinGameBtn.classList.remove("btn-waiting");
-                joinGameBtn.classList.add("btn-started");
-                joinGameBtn.innerText = "Resign";
-                answerInput.value = "";
-                answerDiv.innerText = answer;
-
-                gameStartSound.play();
-                stopYouWon();
-                if (playerName == "Player One") {
-                    startPlayerOneTime();
-                } else {
-                    startPlayerTwoTime();
-                }
-                answerInput.focus();
-
-                status = "joined"
-
-            }
-        });
-        socket.on("partnerleft", (msg) => {
-            joinGameBtn.classList.remove("btn-started");
-            joinGameBtn.classList.remove("btn-waiting");
-
-            playerImg[0].classList.add("hidden")
-            playerImg[1].classList.add("hidden")
-
-            joinGameBtn.innerText = "Join Game";
-            answerDiv.innerText = "____";
-            status = "join"
-            playerName = null;
-            canAddGuess = true;
-            answer = 0;
-            joinGameBtn.classList.add("btn-disabled");
-            gameStartSound.play();
-            roomId = null;
-        });
-
-
-
-
-        socket.on("gameresigned", (msg) => {
-            joinGameBtn.classList.remove("btn-started");
-            joinGameBtn.classList.remove("btn-waiting");
-
-            playerImg[0].classList.add("hidden")
-            playerImg[1].classList.add("hidden")
-
-            joinGameBtn.innerText = "Join Game";
-            answerDiv.innerText = "____";
-
-            status = "join"
-            playerName = null;
-            canAddGuess = true;
-            answer = 0;
-            joinGameBtn.classList.add("btn-disabled");
-
-            roomId = null;
-            singleGuessCon.innerHTML = "";
-
-
-        });
-
-        socket.on('historyUpdate', (msg) => {
-            canAddGuess = msg.historiesAreEqual;
-
-            renderResults(msg.playerOneHistory, msg.playerTwoHistory)
-
-            if (canAddGuess) {
-                if (playerName == "Player One") {
-                    stopPlayerOneTime();
-                    startPlayerOneTime();
-                } else {
-                    stopPlayerTwoTime();
-                    startPlayerTwoTime();
-                }
-            } else {
-                if (playerName == "Player One") {
-                    stopPlayerOneTime();
-                } else {
-                    stopPlayerTwoTime();
-                }
-            }
-        })
-
-
-        function handleJoinGame() {
-
-            if (answer.toString().length > 3 && roomId == null) {
-                socket.emit('joingame', { answer: answer });
-            } else if (joinGameBtn.innerText === "Resign") {
-                handleResignGame();
-                playerImg[0].classList.add("hidden")
-                playerImg[1].classList.add("hidden")
-                joinGameBtn.classList.add("btn-disabled");
-                answer = 0;
-
-            } else {
-                console.log(joinGameBtn.innerText === "Resign", joinGameBtn.innerText)
-            }
-        }
-
-        function handleResignGame() {
-            socket.emit('resigngame', { roomId: roomId, playerName: playerName });
-            gameStartSound.play();
-            joinGameBtn.classList.remove("btn-started");
-            joinGameBtn.classList.remove("btn-waiting");
-
-            joinGameBtn.innerText = "Join Game";
-            answerDiv.innerText = "____";
-            status = "join"
-            roomId = null;
-            playerName = null;
-            canAddGuess = true;
-
-            answer = 0;
-        }
-
-
-
-        function renderResults(playerOneHistory, playerTwoHistory) {
-            const maxRounds = Math.max(playerOneHistory.length, playerTwoHistory.length);
-            singleGuessCon.innerHTML = "";
-
-            for (let i = 0; i < maxRounds; i++) {
-                const p1 = playerOneHistory[i] || [];
-                const p2 = playerTwoHistory[i] || [];
-
-
-                console.log(p1, p2, "<-- this is the number and order")
-                singleGuessCon.innerHTML += singleRound(p1, p2);
-            }
-        }
-
-
-
-        function singleRound(p1, p2) {
-            return ` <div class="singleGuess">
-                    <div class="player-one-con player-con">
-                        <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
-                            <div class="single-num center">${(p1.length && p1[0].toString()) || ""}</div>
-                            <div class="single-num center">${(p1.length && p1[1].toString()) || ""}</div>
-                            <div class="single-num center">${(p1.length && p1[2].toString()) || ""}</div>
-                            <div class="single-num center">${(p1.length && p1[3].toString()) || ""}</div>
-                        </div>
-                        <div class="player-one-n poppins-medium center p1-number n-o">${(p1.length && p1[4].toString()) || ""}</div>
-                        <div class="player-one-n poppins-medium center p1-order n-o">${(p1.length && p1[5].toString()) || ""}</div>
-                    </div>
-                    <div class="player-two-con player-con">
-
-                        <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
-                            <div class="single-num center">${(p2.length && p2[0].toString()) || ""}</div>
-                            <div class="single-num center">${(p2.length && p2[1].toString()) || ""}</div>
-                            <div class="single-num center">${(p2.length && p2[2].toString()) || ""}</div>
-                            <div class="single-num center">${(p2.length && p2[3].toString()) || ""}</div>
-                        </div>
-
-                        <div class="player-two-n poppins-medium center p2-number n-o">${(p2.length && p2[4].toString()) || ""}</div>
-                        <div class="player-two-n poppins-medium center p2-order n-o">${(p2.length && p2[5].toString()) || ""}</div>
-                    </div>
-                </div>
-                `
-        }
-
-        // startPlayerOneTime();
-
-        socket.on('gamewin', (msg) => {
-            gameOverSound.play();
-            let tmpName = "Player One";
-
-            if (msg.winner === "playerTwo") {
-                tmpName = "Player Two";
-            }
-            if (tmpName === playerName) {
-
-                showYouWon("You Won!");
-            } else {
-
-                showYouWon("You Lost");
-            }
-
-            stopPlayerOneTime();
-            stopPlayerTwoTime();
-            joinGameBtn.classList.remove("btn-started");
-            joinGameBtn.classList.remove("btn-waiting");
-
-            playerImg[0].classList.add("hidden")
-            playerImg[1].classList.add("hidden")
-
-            joinGameBtn.innerText = "Join Game";
-            answerDiv.innerText = "____";
-
-            status = "join"
-            playerName = null;
-            canAddGuess = true;
-            answer = 0;
-            joinGameBtn.classList.add("btn-disabled");
-            singleGuessCon.innerHTML = "";
-
-            roomId = null;
-        });
-
-        const userCounterText = document.querySelector(".user-counter");
-
-        socket.on("usercount", (msg) => {
-
-            userCounterText.innerHTML = msg + ` <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="black" class="bi bi-people-fill"
-            viewBox="0 0 16 16">
-            <path
-                d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
-        </svg>`;
-        })
-    </script>
+    <script src="game.js"></script>
 </body>
 
 </html>
