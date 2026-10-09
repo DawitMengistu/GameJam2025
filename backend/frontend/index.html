@@ -15,13 +15,19 @@
 </head>
 
 <body>
-    <div class="user-counter poppins-medium" id="user-counter" aria-live="polite">
-        <span id="user-count-num">0</span>
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
-            <path
-                d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
-        </svg>
-    </div>
+    <header class="top-bar">
+        <div class="profile-chip hide" id="profile-chip">
+            <span class="profile-name poppins-medium" id="profile-name">—</span>
+            <span class="profile-elo poppins-semibold" id="profile-elo">100</span>
+        </div>
+        <div class="user-counter poppins-medium" id="user-counter" aria-live="polite">
+            <span id="user-count-num">0</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                    d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
+            </svg>
+        </div>
+    </header>
 
     <div id="toast-root" class="toast-root" aria-live="polite"></div>
 
@@ -31,8 +37,22 @@
             <h1 class="brand poppins-semibold">ATP</h1>
             <p class="lobby-tagline poppins-regular">Crack your opponent’s number. No zeros. No repeats.</p>
 
-            <div class="lobby-actions">
-                <button type="button" id="btn-create" class="btn btn-primary poppins-medium">Create Room</button>
+            <div id="session-loading" class="session-loading">
+                <div class="auth-spinner" aria-hidden="true"></div>
+                <p class="rules-hint poppins-regular">Loading…</p>
+            </div>
+
+            <div id="auth-panel" class="auth-panel hide">
+                <a id="btn-login-telegram" class="btn btn-primary poppins-medium" href="#" target="_blank" rel="noopener">
+                    Login with Telegram
+                </a>
+                <p class="rules-hint poppins-regular" id="auth-hint">Share contact in the bot to get your sign-in link.</p>
+            </div>
+
+            <div id="play-panel" class="lobby-actions hide">
+                <button type="button" id="btn-vs-ai" class="btn btn-primary poppins-medium">Play vs AI</button>
+                <button type="button" id="btn-create" class="btn btn-secondary poppins-medium">Create Room</button>
+                <button type="button" id="btn-history" class="btn btn-ghost poppins-medium">Match history</button>
 
                 <div class="lobby-divider poppins-regular"><span>or join with a code</span></div>
 
@@ -41,9 +61,21 @@
                         placeholder="Room code" maxlength="6" autocomplete="off" spellcheck="false">
                     <button type="button" id="btn-join" class="btn btn-secondary poppins-medium">Join</button>
                 </div>
+
+                <button type="button" id="btn-logout" class="btn btn-ghost poppins-medium">Log out</button>
             </div>
 
-            <p class="rules-hint poppins-regular">4 digits · 1–9 only · each digit once</p>
+            <p class="rules-hint poppins-regular">4 digits · 1–9 only · each digit once · AI Elo <span id="ai-elo-hint">1000</span></p>
+        </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="screen-history" class="screen screen-history hide">
+        <div class="lobby-card history-card">
+            <h2 class="screen-title poppins-semibold">Match history</h2>
+            <p class="status-line poppins-regular">Recent games and Elo changes</p>
+            <div id="history-list" class="history-list"></div>
+            <button type="button" id="btn-history-back" class="btn btn-primary poppins-medium">Back</button>
         </div>
     </section>
 
@@ -80,8 +112,12 @@
             </div>
 
             <div class="game-con">
-                <div class="player-won-con center hide" id="win-overlay">
-                    <div class="you-won-text poppins-semibold center" id="win-text">You Won!</div>
+                <div class="player-won-con hide" id="win-overlay" role="dialog" aria-modal="true" aria-labelledby="win-text">
+                    <div class="win-overlay-panel poppins-medium">
+                        <div class="you-won-text poppins-semibold center" id="win-text">You Won!</div>
+                        <p class="win-overlay-hint poppins-regular" id="win-elo-hint">Your match history is below</p>
+                        <button type="button" id="btn-win-continue" class="btn btn-primary win-continue-btn poppins-medium">Continue</button>
+                    </div>
                 </div>
 
                 <p class="play-status poppins-medium" id="play-status">Your turn</p>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATP — Sign in</title>
+    <link rel="stylesheet" href="font.css">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .auth-loading {
+            min-height: 100vh;
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 24px;
+            text-align: center;
+        }
+        .auth-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(108, 154, 76, 0.25);
+            border-top-color: var(--green-main, #6c9a4c);
+            border-radius: 50%;
+            animation: auth-spin 0.7s linear infinite;
+        }
+        @keyframes auth-spin {
+            to { transform: rotate(360deg); }
+        }
+        .auth-err {
+            color: var(--red-main, #ad5a4a);
+            max-width: 320px;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-loading">
+        <div class="auth-spinner" id="auth-spinner" aria-hidden="true"></div>
+        <p id="auth-status" class="poppins-regular auth-err" style="display:none"></p>
+    </div>
+    <script>
+        (async () => {
+            const status = document.getElementById('auth-status');
+            const spinner = document.getElementById('auth-spinner');
+            const params = new URLSearchParams(location.search);
+            const token = params.get('token');
+
+            function fail(msg) {
+                spinner.style.display = 'none';
+                status.style.display = 'block';
+                status.textContent = msg;
+            }
+
+            if (!token) {
+                fail('Missing sign-in link. Open the link from Telegram again.');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/auth/consume', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ token }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    fail(data.error || 'Sign-in failed');
+                    return;
+                }
+                location.replace('/');
+            } catch {
+                fail('Network error. Try the Telegram link again.');
+            }
+        })();
+    </script>
+</body>
+</html>

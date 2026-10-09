@@ -3,6 +3,7 @@
 
     const screens = {
         lobby: document.getElementById('screen-lobby'),
+        history: document.getElementById('screen-history'),
         waiting: document.getElementById('screen-waiting'),
         secret: document.getElementById('screen-secret'),
         play: document.getElementById('screen-play'),
@@ -11,7 +12,22 @@
     const els = {
         toastRoot: document.getElementById('toast-root'),
         userCountNum: document.getElementById('user-count-num'),
+        profileChip: document.getElementById('profile-chip'),
+        profileName: document.getElementById('profile-name'),
+        profileElo: document.getElementById('profile-elo'),
+        sessionLoading: document.getElementById('session-loading'),
+        authPanel: document.getElementById('auth-panel'),
+        playPanel: document.getElementById('play-panel'),
+        btnLoginTelegram: document.getElementById('btn-login-telegram'),
+        authHint: document.getElementById('auth-hint'),
+        btnLogout: document.getElementById('btn-logout'),
+        btnHistory: document.getElementById('btn-history'),
+        btnHistoryBack: document.getElementById('btn-history-back'),
+        historyList: document.getElementById('history-list'),
+        aiEloHint: document.getElementById('ai-elo-hint'),
+        winEloHint: document.getElementById('win-elo-hint'),
         btnCreate: document.getElementById('btn-create'),
+        btnVsAi: document.getElementById('btn-vs-ai'),
         btnJoin: document.getElementById('btn-join'),
         joinCodeInput: document.getElementById('join-code-input'),
         roomCodeText: document.getElementById('room-code-text'),
@@ -31,6 +47,8 @@
         sideRole: document.getElementById('side-role'),
         winOverlay: document.getElementById('win-overlay'),
         winText: document.getElementById('win-text'),
+        btnWinContinue: document.getElementById('btn-win-continue'),
+        gameCon: document.querySelector('.game-con'),
         playerOneTime: document.querySelector('.player-one-time'),
         playerTwoTime: document.querySelector('.player-two-time'),
         p1Label: document.getElementById('p1-label'),
@@ -45,6 +63,10 @@
         canAddGuess: true,
         secretLocked: false,
         intentionalLeave: false,
+        pendingWinMessage: null,
+        user: null,
+        config: null,
+        gameEnded: false,
     };
 
     let playerOneTimeInterval = null;
@@ -109,13 +131,31 @@
 
     function stopYouWon() {
         els.winOverlay.classList.add('hide');
+        els.winOverlay.classList.remove('win-outcome--won', 'win-outcome--lost');
         els.winText.classList.remove('animate-win-loss');
+        els.gameCon?.classList.remove('game-ended');
+        state.pendingWinMessage = null;
     }
 
-    function showYouWon(text) {
+    function showGameEndOverlay(text, didWin) {
+        state.gameEnded = true;
+        state.canAddGuess = false;
         els.winText.textContent = text;
         els.winOverlay.classList.remove('hide');
+        els.winOverlay.classList.toggle('win-outcome--won', didWin);
+        els.winOverlay.classList.toggle('win-outcome--lost', !didWin);
         els.winText.classList.add('animate-win-loss');
+        els.gameCon?.classList.add('game-ended');
+        els.guessInput.value = '';
+        els.guessInput.disabled = true;
+        els.btnResign.disabled = true;
+        stopAllTimers();
+    }
+
+    function leaveAfterWin() {
+        const msg = state.pendingWinMessage;
+        stopYouWon();
+        resetToLobby(msg ? { message: msg.text, type: msg.type } : {});
     }
 
     function getRandomGuess() {
@@ -194,10 +234,13 @@
         state.canAddGuess = true;
         state.secretLocked = false;
         state.intentionalLeave = false;
+        state.gameEnded = false;
         els.historyBoard.innerHTML = '';
         els.mySecretDisplay.textContent = '____';
         els.secretInput.value = '';
         els.guessInput.value = '';
+        els.guessInput.disabled = false;
+        els.btnResign.disabled = false;
         els.joinCodeInput.value = '';
         els.btnSetSecret.disabled = true;
         els.p1Label.classList.remove('you-label');
@@ -217,10 +260,13 @@
     }
 
     function enterPlay() {
+        state.gameEnded = false;
         els.mySecretDisplay.textContent = state.secret;
         els.sideRoom.textContent = `Room ${state.roomId}`;
         els.sideRole.textContent = state.playerName;
         els.guessInput.value = '';
+        els.guessInput.disabled = false;
+        els.btnResign.disabled = false;
         state.canAddGuess = true;
         els.playStatus.textContent = 'Your turn';
 
@@ -234,7 +280,7 @@
     }
 
     function submitGuess(guess) {
-        if (!state.roomId || state.screen !== 'play') return;
+        if (!state.roomId || state.screen !== 'play' || state.gameEnded) return;
         if (!state.canAddGuess) {
             showToast('Wait for your opponent to guess', 'error');
             return;
@@ -299,19 +345,149 @@
         resetToLobby({ message: 'Left the room', type: 'info' });
     }
 
+    function setLoggedInUI(user) {
+        state.user = user;
+        els.sessionLoading?.classList.add('hide');
+        if (user) {
+            els.authPanel.classList.add('hide');
+            els.playPanel.classList.remove('hide');
+            els.profileChip.classList.remove('hide');
+            els.profileName.textContent = user.display_name;
+            els.profileElo.textContent = String(user.elo);
+        } else {
+            els.authPanel.classList.remove('hide');
+            els.playPanel.classList.add('hide');
+            els.profileChip.classList.add('hide');
+        }
+    }
+
+    function requireAuth() {
+        if (state.user) return true;
+        showToast('Log in with Telegram to play', 'error');
+        return false;
+    }
+
+    async function loadConfigAndMe() {
+        try {
+            const cfgRes = await fetch('/api/config', { credentials: 'include' });
+            state.config = await cfgRes.json();
+            if (els.aiEloHint && state.config.ai_elo) {
+                els.aiEloHint.textContent = String(state.config.ai_elo);
+            }
+            if (state.config.telegram_login_url) {
+                els.btnLoginTelegram.href = state.config.telegram_login_url;
+            } else {
+                els.btnLoginTelegram.removeAttribute('href');
+                els.btnLoginTelegram.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    showToast('Set TELEGRAM_BOT_USERNAME in .env for the login link', 'error');
+                });
+                els.authHint.textContent =
+                    'Ask your bot for a sign-in link (set TELEGRAM_BOT_USERNAME for a button).';
+            }
+        } catch {
+            /* ignore */
+        }
+
+        try {
+            const meRes = await fetch('/api/me', { credentials: 'include' });
+            if (meRes.ok) {
+                const me = await meRes.json();
+                setLoggedInUI(me);
+            } else {
+                setLoggedInUI(null);
+            }
+        } catch {
+            setLoggedInUI(null);
+        }
+    }
+
+    async function openHistory() {
+        if (!requireAuth()) return;
+        els.historyList.innerHTML = '<p class="status-line poppins-regular">Loading…</p>';
+        showScreen('history');
+        try {
+            const res = await fetch('/api/history', { credentials: 'include' });
+            const data = await res.json();
+            if (!res.ok) {
+                els.historyList.innerHTML = `<p class="status-line">${data.error || 'Failed'}</p>`;
+                return;
+            }
+            if (!data.games?.length) {
+                els.historyList.innerHTML =
+                    '<p class="status-line poppins-regular">No games yet — play vs AI or a friend.</p>';
+                return;
+            }
+            els.historyList.innerHTML = data.games
+                .map((g) => {
+                    const delta =
+                        g.elo_delta === 0
+                            ? '—'
+                            : g.elo_delta > 0
+                              ? `+${g.elo_delta}`
+                              : String(g.elo_delta);
+                    const resultClass =
+                        g.result === 'win'
+                            ? 'hist-win'
+                            : g.result === 'loss'
+                              ? 'hist-loss'
+                              : '';
+                    const label = g.result_label || (g.result === 'win' ? 'You won' : g.result === 'loss' ? 'You lost' : 'Unknown');
+                    const when = g.finished_at
+                        ? new Date(g.finished_at).toLocaleString()
+                        : '';
+                    return `<div class="history-row ${resultClass}">
+                        <div class="history-row-main">
+                            <span class="poppins-semibold">${label}</span>
+                            <span class="poppins-regular">vs ${g.opponent}${g.opponent_elo != null ? ` (${g.opponent_elo})` : ''}</span>
+                        </div>
+                        <div class="history-row-meta poppins-regular">
+                            <span>${g.mode === 'ai' ? 'AI' : 'PvP'}</span>
+                            <span class="elo-delta">${delta} Elo</span>
+                            <span>${when}</span>
+                        </div>
+                    </div>`;
+                })
+                .join('');
+        } catch {
+            els.historyList.innerHTML = '<p class="status-line">Network error</p>';
+        }
+    }
+
     // ——— UI events ———
 
     els.btnCreate.addEventListener('click', () => {
+        if (!requireAuth()) return;
         socket.emit('createRoom');
     });
 
+    els.btnVsAi.addEventListener('click', () => {
+        if (!requireAuth()) return;
+        socket.emit('playVsAI');
+    });
+
     els.btnJoin.addEventListener('click', () => {
+        if (!requireAuth()) return;
         const code = els.joinCodeInput.value.trim().toUpperCase();
         if (!code) {
             showToast('Enter a room code', 'error');
             return;
         }
         socket.emit('joinRoom', { code });
+    });
+
+    els.btnHistory?.addEventListener('click', () => openHistory());
+    els.btnHistoryBack?.addEventListener('click', () => showScreen('lobby'));
+
+    els.btnLogout?.addEventListener('click', async () => {
+        try {
+            await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+        } catch {
+            /* ignore */
+        }
+        setLoggedInUI(null);
+        showToast('Logged out', 'info');
+        location.reload();
     });
 
     els.joinCodeInput.addEventListener('input', () => {
@@ -358,7 +534,10 @@
     });
 
     els.guessInput.addEventListener('input', () => {
-        if (state.screen !== 'play') return;
+        if (state.screen !== 'play' || state.gameEnded) {
+            if (state.gameEnded) els.guessInput.value = '';
+            return;
+        }
         if (!state.canAddGuess) {
             els.guessInput.value = '';
             showToast('Wait for your opponent to guess', 'error');
@@ -380,14 +559,27 @@
         });
     });
 
+    els.btnWinContinue.addEventListener('click', () => {
+        leaveAfterWin();
+    });
+
     // ——— Socket events ———
 
     socket.on('roomError', (msg) => {
-        showToast(msg?.reason || 'Something went wrong', 'error');
+        const reason = msg?.reason || 'Something went wrong';
+        // Ignore late-game races (AI already won while user was typing)
+        if (state.gameEnded) return;
+        if (/game is not active/i.test(reason)) return;
+        showToast(reason, 'error');
     });
 
     socket.on('statusMessage', (msg) => {
-        if (msg?.message) showToast(msg.message, msg.type || 'info');
+        // Avoid toast spam on matchmaking / secret lock — status text covers it
+        if (!msg?.message) return;
+        if (/share your code|playing vs ai|joined room|secret locked|set your secret/i.test(msg.message)) {
+            return;
+        }
+        showToast(msg.message, msg.type || 'info');
     });
 
     socket.on('roomCreated', (msg) => {
@@ -396,6 +588,26 @@
         els.roomCodeText.textContent = msg.roomId;
         els.waitingStatus.textContent = 'Share this code with a friend';
         showScreen('waiting');
+    });
+
+    socket.on('authed', (msg) => {
+        setLoggedInUI({
+            id: msg.id,
+            display_name: msg.display_name,
+            elo: msg.elo,
+            ai_elo: msg.ai_elo,
+        });
+        if (msg.ai_elo && els.aiEloHint) {
+            els.aiEloHint.textContent = String(msg.ai_elo);
+        }
+    });
+
+    socket.on('aiMatched', (msg) => {
+        state.roomId = msg.roomId;
+        state.playerName = msg.playerName;
+        const eng = msg.engine === 'neural' ? 'trained model' : 'heuristic AI';
+        const eloBit = msg.aiElo != null ? ` · ${msg.aiElo} Elo` : '';
+        goToSecretScreen(`vs AI (${eng}${eloBit}) — set your secret number`);
     });
 
     socket.on('opponentJoined', (msg) => {
@@ -415,7 +627,6 @@
         els.secretInput.disabled = true;
         els.btnSetSecret.disabled = true;
         els.secretStatus.textContent = 'Secret locked in — waiting for opponent…';
-        showToast('Secret locked in', 'info');
     });
 
     socket.on('gamestarted', (msg) => {
@@ -428,7 +639,7 @@
     });
 
     socket.on('historyUpdate', (msg) => {
-        if (msg.roomId !== state.roomId) return;
+        if (msg.roomId !== state.roomId || state.gameEnded) return;
         state.canAddGuess = msg.historiesAreEqual;
         renderResults(msg.playerOneHistory, msg.playerTwoHistory);
 
@@ -445,15 +656,57 @@
 
     socket.on('gamewin', (msg) => {
         if (msg.roomId !== state.roomId) return;
+        if (state.gameEnded) return;
         stopAllTimers();
         const winnerName = msg.winner === 'playerTwo' ? 'Player Two' : 'Player One';
-        showYouWon(winnerName === state.playerName ? 'You Won!' : 'You Lost');
-        setTimeout(() => {
-            resetToLobby({
-                message: winnerName === state.playerName ? 'Victory!' : 'Defeat — try again',
-                type: 'info',
-            });
-        }, 2200);
+        const didWin = winnerName === state.playerName;
+        let eloLine = 'Your match history is below';
+        if (msg.elo && state.playerName === 'Player One' && msg.elo.playerOneDelta != null) {
+            const d = msg.elo.playerOneDelta;
+            if (d !== 0) {
+                eloLine = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerOneElo}`;
+                if (state.user) {
+                    state.user.elo = msg.elo.playerOneElo;
+                    els.profileElo.textContent = String(msg.elo.playerOneElo);
+                }
+            } else if (msg.elo.aiElo != null) {
+                eloLine = `vs AI (${msg.elo.aiElo} Elo) — rating unchanged`;
+            }
+        } else if (msg.elo && state.playerName === 'Player Two' && msg.elo.playerTwoDelta != null) {
+            const d = msg.elo.playerTwoDelta;
+            if (d !== 0) {
+                eloLine = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerTwoElo}`;
+                if (state.user) {
+                    state.user.elo = msg.elo.playerTwoElo;
+                    els.profileElo.textContent = String(msg.elo.playerTwoElo);
+                }
+            }
+        }
+        if (els.winEloHint) els.winEloHint.textContent = eloLine;
+        state.pendingWinMessage = {
+            text: didWin ? 'Victory!' : 'Defeat — try again',
+            type: 'info',
+        };
+        showGameEndOverlay(didWin ? 'You Won!' : 'You Lost', didWin);
+    });
+
+    socket.on('eloUpdate', (msg) => {
+        if (!msg?.elo || !state.user) return;
+        if (state.playerName === 'Player One' && msg.elo.playerOneElo != null) {
+            state.user.elo = msg.elo.playerOneElo;
+            els.profileElo.textContent = String(msg.elo.playerOneElo);
+            if (els.winEloHint && msg.elo.playerOneDelta) {
+                const d = msg.elo.playerOneDelta;
+                els.winEloHint.textContent = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerOneElo}`;
+            }
+        } else if (state.playerName === 'Player Two' && msg.elo.playerTwoElo != null) {
+            state.user.elo = msg.elo.playerTwoElo;
+            els.profileElo.textContent = String(msg.elo.playerTwoElo);
+            if (els.winEloHint && msg.elo.playerTwoDelta) {
+                const d = msg.elo.playerTwoDelta;
+                els.winEloHint.textContent = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerTwoElo}`;
+            }
+        }
     });
 
     socket.on('gameresigned', () => {
@@ -469,4 +722,6 @@
     socket.on('usercount', (count) => {
         els.userCountNum.textContent = String(count);
     });
+
+    loadConfigAndMe();
 })();

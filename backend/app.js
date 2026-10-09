@@ -1,23 +1,35 @@
+import 'dotenv/config';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import { createServer } from 'node:http';
 import { join, dirname } from 'node:path';
 import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
+import { validateNumber, scoreGuess, randomCode } from './ai/codes.js';
+import { createAiBrain, getAiEngine } from './ai/policy.js';
+import apiRouter from './auth/routes.js';
+import { isDbConfigured } from './db/pool.js';
+import { userFromSocket } from './auth/socketUser.js';
+import { recordFinishedGame, AI_DEFAULT_ELO } from './db/games.js';
+
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+app.use(express.json({ limit: '32kb' }));
+app.use(cookieParser());
+app.use('/api', apiRouter);
+
+app.get('/auth', (req, res) => {
+    res.sendFile(join(__dirname, './frontend/auth.html'));
+});
 
 app.use(express.static(join(__dirname, './frontend')));
 
 const server = createServer(app);
 const io = new Server(server);
 
-/** @type {Record<string, {
- *   code: string,
- *   playerOne: { id: string, answer: string|null, history: number[][], ready: boolean } | null,
- *   playerTwo: { id: string, answer: string|null, history: number[][], ready: boolean } | null,
- *   status: 'waiting' | 'ready' | 'playing' | 'finished'
- * }>} */
+/** @type {Record<string, any>} */
 const rooms = {};
 let userCounter = 0;
 
@@ -32,41 +44,13 @@ function generateRoomCode() {
     return code;
 }
 
-/**
- * Validate a 4-digit secret/guess: digits only, no zero, all unique.
- * @returns {{ ok: true, value: string } | { ok: false, reason: string }}
- */
-function validateNumber(input) {
-    const value = String(input ?? '').trim();
-
-    if (!/^\d{4}$/.test(value)) {
-        return { ok: false, reason: 'Enter exactly 4 digits' };
-    }
-    if (value.includes('0')) {
-        return { ok: false, reason: 'Digits cannot include 0' };
-    }
-    if (new Set(value).size !== 4) {
-        return { ok: false, reason: 'Each digit must be unique' };
-    }
-    return { ok: true, value };
+function isAiId(id) {
+    return typeof id === 'string' && id.startsWith('AI:');
 }
 
-function calculateNumberOrder(guess, answer) {
-    const guessStr = String(guess);
-    const answerStr = String(answer);
-    let numberCorrect = 0;
-    let orderCorrect = 0;
-
-    for (let i = 0; i < guessStr.length; i++) {
-        const digit = guessStr[i];
-        if (answerStr.includes(digit)) {
-            numberCorrect++;
-            if (answerStr[i] === digit) {
-                orderCorrect++;
-            }
-        }
-    }
-    return [numberCorrect, orderCorrect];
+function emitToPlayer(player, event, payload) {
+    if (!player?.id || isAiId(player.id)) return;
+    io.to(player.id).emit(event, payload);
 }
 
 function findRoomBySocketId(socketId) {
@@ -97,6 +81,76 @@ function emitError(socket, reason) {
     socket.emit('roomError', { reason });
 }
 
+function cleanupRoom(code) {
+    delete rooms[code];
+}
+
+async function finishGame(code, winnerKey) {
+    const room = rooms[code];
+    if (!room || room.status === 'finished') return;
+    room.status = 'finished';
+
+    // Optimistic: notify clients immediately, then persist (DB must not delay the UI)
+    const snapshot = {
+        roomCode: code,
+        mode: room.vsAI ? 'ai' : 'pvp',
+        playerOneId: room.playerOne?.userId || null,
+        playerTwoId: room.vsAI ? null : room.playerTwo?.userId || null,
+        winnerKey,
+        playerOneHistory: room.playerOne?.history || [],
+        playerTwoHistory: room.playerTwo?.history || [],
+        vsAI: room.vsAI,
+        playerOne: room.playerOne,
+        playerTwo: room.playerTwo,
+    };
+
+    const winPayload = {
+        roomId: code,
+        winner: winnerKey,
+        elo: room.vsAI
+            ? {
+                  playerOneDelta: 0,
+                  playerTwoDelta: 0,
+                  playerOneElo: room.playerOne?.elo ?? null,
+                  playerTwoElo: AI_DEFAULT_ELO,
+                  aiElo: AI_DEFAULT_ELO,
+              }
+            : null,
+    };
+    emitToPlayer(snapshot.playerOne, 'gamewin', winPayload);
+    emitToPlayer(snapshot.playerTwo, 'gamewin', winPayload);
+    cleanupRoom(code);
+
+    try {
+        const eloInfo = await recordFinishedGame({
+            roomCode: snapshot.roomCode,
+            mode: snapshot.mode,
+            playerOneId: snapshot.playerOneId,
+            playerTwoId: snapshot.playerTwoId,
+            winnerKey: snapshot.winnerKey,
+            playerOneHistory: snapshot.playerOneHistory,
+            playerTwoHistory: snapshot.playerTwoHistory,
+        });
+        // PvP: push Elo update after DB (optional refresh for clients still on overlay)
+        if (eloInfo && snapshot.mode === 'pvp') {
+            const eloPayload = {
+                roomId: code,
+                winner: winnerKey,
+                elo: {
+                    playerOneDelta: eloInfo.playerOneDelta,
+                    playerTwoDelta: eloInfo.playerTwoDelta,
+                    playerOneElo: eloInfo.playerOneElo,
+                    playerTwoElo: eloInfo.playerTwoElo,
+                },
+            };
+            emitToPlayer(snapshot.playerOne, 'eloUpdate', eloPayload);
+            emitToPlayer(snapshot.playerTwo, 'eloUpdate', eloPayload);
+        }
+    } catch (err) {
+        console.warn('[games] record failed:', err.message);
+    }
+}
+
 function tryStartGame(code) {
     const room = rooms[code];
     if (!room?.playerOne?.ready || !room?.playerTwo?.ready) return;
@@ -104,23 +158,124 @@ function tryStartGame(code) {
 
     room.status = 'playing';
     const payload = { roomId: code };
-    io.to(room.playerOne.id).emit('gamestarted', payload);
-    io.to(room.playerTwo.id).emit('gamestarted', payload);
+    emitToPlayer(room.playerOne, 'gamestarted', payload);
+    emitToPlayer(room.playerTwo, 'gamestarted', payload);
+
+    if (room.vsAI) {
+        scheduleAiGuess(code);
+    }
 }
 
-function cleanupRoom(code) {
-    delete rooms[code];
+/**
+ * Apply a guess for a seat. Returns { ok, win, illegal, reason }.
+ */
+async function applyGuess(code, key, guessRaw) {
+    const room = rooms[code];
+    if (!room || room.status !== 'playing') {
+        // Late guess after AI/human already finished — silent for the client
+        return { ok: false, reason: 'Game is not active', silent: true };
+    }
+
+    const other = otherKey(key);
+    if (!room[key] || !room[other]) {
+        return { ok: false, reason: 'Opponent missing' };
+    }
+
+    const myHistory = room[key].history;
+    const theirHistory = room[other].history;
+    if (myHistory.length > theirHistory.length) {
+        return { ok: false, reason: 'Wait for your opponent to guess' };
+    }
+
+    const validation = validateNumber(guessRaw);
+    if (!validation.ok) {
+        return { ok: false, reason: validation.reason, illegal: true };
+    }
+
+    const [numberCorrect, orderCorrect] = scoreGuess(
+        validation.value,
+        room[other].answer
+    );
+
+    const guessArray = validation.value.split('').map(Number);
+    guessArray.push(numberCorrect, orderCorrect);
+    room[key].history = [...myHistory, guessArray];
+
+    if (room.vsAI && key === 'playerTwo' && room.aiBrain) {
+        room.aiBrain.observe(validation.value, numberCorrect, orderCorrect);
+    }
+
+    const playerOneHistory = room.playerOne.history;
+    const playerTwoHistory = room.playerTwo.history;
+    const historiesAreEqual = playerOneHistory.length === playerTwoHistory.length;
+
+    const historyPayload = {
+        roomId: code,
+        playerOneHistory,
+        playerTwoHistory,
+        historiesAreEqual,
+    };
+
+    if (!historiesAreEqual) {
+        emitToPlayer(room[key], 'historyUpdate', historyPayload);
+    } else {
+        emitToPlayer(room.playerOne, 'historyUpdate', historyPayload);
+        emitToPlayer(room.playerTwo, 'historyUpdate', historyPayload);
+    }
+
+    if (numberCorrect === 4 && orderCorrect === 4) {
+        await finishGame(code, key);
+        return { ok: true, win: true };
+    }
+
+    return { ok: true, win: false, historiesAreEqual };
+}
+
+function scheduleAiGuess(code) {
+    setTimeout(async () => {
+        const room = rooms[code];
+        if (!room?.vsAI || room.status !== 'playing') return;
+
+        const ai = room.playerTwo;
+        const human = room.playerOne;
+        if (!ai || !human) return;
+        if (ai.history.length > human.history.length) return;
+
+        const guess = room.aiBrain ? room.aiBrain.act() : randomCode();
+        const result = await applyGuess(code, 'playerTwo', guess);
+        if (!result.ok && !result.illegal) {
+            await applyGuess(code, 'playerTwo', randomCode());
+        }
+    }, 700);
+}
+
+function requireSocketUser(socket) {
+    if (!isDbConfigured()) return true;
+    if (socket.data?.user?.id) return true;
+    emitError(socket, 'Log in with Telegram to play');
+    return false;
 }
 
 app.get('/', (req, res) => {
     res.sendFile(join(__dirname, '/frontend/index.html'));
 });
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
     userCounter += 1;
     io.emit('usercount', userCounter);
 
+    socket.data.user = await userFromSocket(socket);
+    if (socket.data.user) {
+        socket.emit('authed', {
+            id: socket.data.user.id,
+            display_name: socket.data.user.display_name,
+            elo: socket.data.user.elo,
+            ai_elo: AI_DEFAULT_ELO,
+        });
+    }
+
     socket.on('createRoom', () => {
+        if (!requireSocketUser(socket)) return;
         const existing = findRoomBySocketId(socket.id);
         if (existing) {
             emitError(socket, 'You are already in a room');
@@ -130,8 +285,12 @@ io.on('connection', (socket) => {
         const code = generateRoomCode();
         rooms[code] = {
             code,
+            vsAI: false,
             playerOne: {
                 id: socket.id,
+                userId: socket.data.user.id,
+                displayName: socket.data.user.display_name,
+                elo: socket.data.user.elo,
                 answer: null,
                 history: [],
                 ready: false,
@@ -150,7 +309,58 @@ io.on('connection', (socket) => {
         });
     });
 
+    socket.on('playVsAI', () => {
+        if (!requireSocketUser(socket)) return;
+        const existing = findRoomBySocketId(socket.id);
+        if (existing) {
+            emitError(socket, 'You are already in a room');
+            return;
+        }
+
+        const code = generateRoomCode();
+        const aiSecret = randomCode();
+        rooms[code] = {
+            code,
+            vsAI: true,
+            aiBrain: createAiBrain(),
+            playerOne: {
+                id: socket.id,
+                userId: socket.data.user.id,
+                displayName: socket.data.user.display_name,
+                elo: socket.data.user.elo,
+                answer: null,
+                history: [],
+                ready: false,
+            },
+            playerTwo: {
+                id: `AI:${code}`,
+                userId: null,
+                displayName: 'ATP AI',
+                elo: AI_DEFAULT_ELO,
+                answer: aiSecret,
+                history: [],
+                ready: true,
+            },
+            status: 'ready',
+        };
+
+        socket.emit('aiMatched', {
+            roomId: code,
+            playerName: 'Player One',
+            engine: getAiEngine(),
+            aiElo: AI_DEFAULT_ELO,
+        });
+        socket.emit('statusMessage', {
+            message:
+                getAiEngine() === 'neural'
+                    ? `Playing vs AI (${AI_DEFAULT_ELO} Elo) — set your secret`
+                    : `Playing vs AI (${AI_DEFAULT_ELO} Elo) — set your secret`,
+            type: 'info',
+        });
+    });
+
     socket.on('joinRoom', (msg = {}) => {
+        if (!requireSocketUser(socket)) return;
         const existing = findRoomBySocketId(socket.id);
         if (existing) {
             emitError(socket, 'You are already in a room');
@@ -168,6 +378,10 @@ io.on('connection', (socket) => {
             emitError(socket, 'Room not found');
             return;
         }
+        if (room.vsAI) {
+            emitError(socket, 'This is an AI game room');
+            return;
+        }
         if (room.status === 'finished') {
             emitError(socket, 'This room has already ended');
             return;
@@ -180,9 +394,16 @@ io.on('connection', (socket) => {
             emitError(socket, 'You cannot join your own room');
             return;
         }
+        if (room.playerOne?.userId && room.playerOne.userId === socket.data.user.id) {
+            emitError(socket, 'You are already in this room');
+            return;
+        }
 
         room.playerTwo = {
             id: socket.id,
+            userId: socket.data.user.id,
+            displayName: socket.data.user.display_name,
+            elo: socket.data.user.elo,
             answer: null,
             history: [],
             ready: false,
@@ -194,7 +415,7 @@ io.on('connection', (socket) => {
             playerName: 'Player Two',
         });
 
-        io.to(room.playerOne.id).emit('opponentJoined', {
+        emitToPlayer(room.playerOne, 'opponentJoined', {
             roomId: code,
             message: 'Player Two joined — set your secret number',
         });
@@ -225,7 +446,7 @@ io.on('connection', (socket) => {
 
         const isPlayerOne = room.playerOne?.id === socket.id;
         const key = isPlayerOne ? 'playerOne' : 'playerTwo';
-        if (!room[key]) {
+        if (!room[key] || isAiId(room[key].id)) {
             emitError(socket, 'Invalid player');
             return;
         }
@@ -269,18 +490,16 @@ io.on('connection', (socket) => {
         }
 
         const other = room[otherKey(key)];
-        if (other?.id) {
-            io.to(other.id).emit('gameresigned', { roomId: code });
-        }
+        emitToPlayer(other, 'gameresigned', { roomId: code });
         socket.emit('gameresigned', { roomId: code });
         cleanupRoom(code);
     });
 
-    socket.on('guessput', (msg = {}) => {
+    socket.on('guessput', async (msg = {}) => {
         const code = String(msg.roomId ?? '').trim().toUpperCase();
         const room = rooms[code];
         if (!room || room.status !== 'playing') {
-            emitError(socket, 'Game is not active');
+            // Quiet ignore — game already ended (common when AI wins mid-type)
             return;
         }
 
@@ -290,58 +509,16 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const other = otherKey(key);
-        if (!room[other]) {
-            emitError(socket, 'Opponent missing');
+        const result = await applyGuess(code, key, msg.guess);
+        if (!result.ok) {
+            if (!result.silent) emitError(socket, result.reason);
             return;
         }
 
-        const myHistory = room[key].history;
-        const theirHistory = room[other].history;
-        if (myHistory.length > theirHistory.length) {
-            emitError(socket, 'Wait for your opponent to guess');
-            return;
-        }
-
-        const validation = validateNumber(msg.guess);
-        if (!validation.ok) {
-            emitError(socket, validation.reason);
-            return;
-        }
-
-        const [numberCorrect, orderCorrect] = calculateNumberOrder(
-            validation.value,
-            room[other].answer
-        );
-
-        const guessArray = validation.value.split('').map(Number);
-        guessArray.push(numberCorrect, orderCorrect);
-        room[key].history = [...myHistory, guessArray];
-
-        const playerOneHistory = room.playerOne.history;
-        const playerTwoHistory = room.playerTwo.history;
-        const historiesAreEqual = playerOneHistory.length === playerTwoHistory.length;
-
-        const historyPayload = {
-            roomId: code,
-            playerOneHistory,
-            playerTwoHistory,
-            historiesAreEqual,
-        };
-
-        if (!historiesAreEqual) {
-            socket.emit('historyUpdate', historyPayload);
-        } else {
-            io.to(room.playerOne.id).emit('historyUpdate', historyPayload);
-            io.to(room.playerTwo.id).emit('historyUpdate', historyPayload);
-        }
-
-        if (numberCorrect === 4 && orderCorrect === 4) {
-            room.status = 'finished';
-            const winPayload = { roomId: code, winner: key };
-            io.to(room.playerOne.id).emit('gamewin', winPayload);
-            io.to(room.playerTwo.id).emit('gamewin', winPayload);
-            cleanupRoom(code);
+        // room may be deleted after a win — use snapshot flag
+        if (!result.win) {
+            const still = rooms[code];
+            if (still?.vsAI) scheduleAiGuess(code);
         }
     });
 
@@ -356,13 +533,13 @@ io.on('connection', (socket) => {
         const partner =
             room.playerOne?.id === socket.id ? room.playerTwo : room.playerOne;
 
-        if (partner?.id) {
-            io.to(partner.id).emit('partnerleft', { roomId: code });
-        }
+        emitToPlayer(partner, 'partnerleft', { roomId: code });
         cleanupRoom(code);
     });
 });
 
 server.listen(3000, () => {
     console.log('server running at http://localhost:3000');
+    console.log(`[ai] engine: ${getAiEngine()}`);
+    console.log(`[db] ${isDbConfigured() ? 'Neon connected (DATABASE_URL set)' : 'no DATABASE_URL — auth disabled'}`);
 });
