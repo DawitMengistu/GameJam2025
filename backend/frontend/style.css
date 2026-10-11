@@ -464,11 +464,40 @@ body {
     overflow: hidden;
 }
 
+.play-end-banner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-height: 1.4em;
+}
+
 .play-status {
     margin: 0;
     text-align: center;
     font-size: 0.95rem;
     color: var(--blue-main);
+}
+
+.play-status.status-win {
+    color: var(--green-main);
+    font-size: 1.15rem;
+}
+
+.play-status.status-lose {
+    color: var(--red-main);
+    font-size: 1.15rem;
+}
+
+.play-elo-line {
+    margin: 0;
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+.play-elo-line.hide {
+    display: none;
 }
 
 .side-bar {
@@ -592,6 +621,61 @@ body {
     grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.end-action-cons {
+    grid-template-columns: 1fr 1fr;
+}
+
+.rematch-invite-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 60;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    max-width: min(420px, calc(100vw - 24px));
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid rgba(59, 59, 59, 0.14);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.rematch-invite-bar.hide {
+    display: none;
+}
+
+.rematch-invite-text {
+    margin: 0;
+    flex: 1 1 100%;
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--balck-border);
+}
+
+.rematch-invite-bar .bottom-btn {
+    min-width: 100px;
+}
+
+.btn-end-home {
+    background-color: var(--balck-border);
+}
+
+.btn-end-home:hover {
+    background-color: #2a2a2a;
+}
+
+.btn-play-again {
+    background-color: var(--green-main);
+}
+
+.btn-play-again:hover {
+    background-color: var(--green-hovered);
+}
+
 .answer-input {
     border-radius: 8px;
     font-size: 1rem;
@@ -638,59 +722,12 @@ body {
     background-color: #965040;
 }
 
-.player-won-con {
-    position: absolute;
-    inset: 0;
-    z-index: 20;
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 12px 12px 0;
-    background: rgba(59, 59, 59, 0.45);
-    backdrop-filter: blur(2px);
-    color: var(--balck-border);
-    pointer-events: auto;
+.game-con.game-ended #play-actions {
+    display: none;
 }
 
-.player-won-con.win-outcome--won .win-overlay-panel {
-    border-color: var(--green-main);
-    box-shadow: 0 16px 48px rgba(108, 154, 76, 0.35);
-}
-
-.player-won-con.win-outcome--lost .win-overlay-panel {
-    border-color: var(--red-main);
-    box-shadow: 0 16px 48px rgba(173, 90, 74, 0.35);
-}
-
-.win-overlay-panel {
-    width: min(340px, 100%);
-    background: var(--surface);
-    border-radius: calc(var(--radius) + 2px);
-    padding: 28px 22px 22px;
-    box-shadow: var(--shadow);
-    text-align: center;
-    border: 3px solid rgba(59, 59, 59, 0.12);
-    margin-top: 8px;
-}
-
-.win-overlay-hint {
-    margin: 8px 0 20px;
-    font-size: 0.9rem;
-    color: var(--muted);
-}
-
-.win-continue-btn {
-    width: 100%;
-}
-
-.game-con.game-ended .bottom-action-cons {
-    pointer-events: none;
-    opacity: 0.45;
-}
-
-.you-won-text {
-    font-size: clamp(2rem, 6vw, 2.75rem);
-    color: var(--balck-border);
+.game-con.game-ended #end-actions:not(.hide) {
+    display: grid;
 }
 
 .animate-win-loss {

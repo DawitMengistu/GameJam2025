@@ -31,6 +31,12 @@
 
     <div id="toast-root" class="toast-root" aria-live="polite"></div>
 
+    <div class="rematch-invite-bar hide" id="rematch-invite-bar" role="dialog" aria-live="polite">
+        <p class="rematch-invite-text poppins-medium" id="rematch-invite-text">Rematch?</p>
+        <button type="button" id="btn-rematch-accept" class="bottom-btn btn-play-again poppins-medium">Accept</button>
+        <button type="button" id="btn-rematch-decline" class="bottom-btn btn-end-home poppins-medium">Decline</button>
+    </div>
+
     <!-- LOBBY -->
     <section id="screen-lobby" class="screen screen-lobby">
         <div class="lobby-card">
@@ -112,15 +118,10 @@
             </div>
 
             <div class="game-con">
-                <div class="player-won-con hide" id="win-overlay" role="dialog" aria-modal="true" aria-labelledby="win-text">
-                    <div class="win-overlay-panel poppins-medium">
-                        <div class="you-won-text poppins-semibold center" id="win-text">You Won!</div>
-                        <p class="win-overlay-hint poppins-regular" id="win-elo-hint">Your match history is below</p>
-                        <button type="button" id="btn-win-continue" class="btn btn-primary win-continue-btn poppins-medium">Continue</button>
-                    </div>
+                <div class="play-end-banner" id="play-end-banner">
+                    <p class="play-status poppins-semibold" id="play-status">Your turn</p>
+                    <p class="play-elo-line poppins-regular hide" id="play-elo-line"></p>
                 </div>
-
-                <p class="play-status poppins-medium" id="play-status">Your turn</p>
 
                 <div class="top-half">
                     <div class="player-one-con player-con">
@@ -137,10 +138,15 @@
 
                 <div class="bottom-half" id="history-board"></div>
 
-                <div class="bottom-action-cons">
+                <div class="bottom-action-cons" id="play-actions">
                     <input type="text" id="guess-input" class="answer-input poppins-medium"
                         inputmode="numeric" maxlength="4" placeholder="Your guess" autocomplete="off">
                     <button type="button" id="btn-resign" class="bottom-btn btn-started poppins-medium">Resign</button>
+                </div>
+
+                <div class="bottom-action-cons end-action-cons hide" id="end-actions">
+                    <button type="button" id="btn-end-home" class="bottom-btn btn-end-home poppins-medium">Home</button>
+                    <button type="button" id="btn-play-again" class="bottom-btn btn-play-again poppins-medium">Play again</button>
                 </div>
             </div>
 

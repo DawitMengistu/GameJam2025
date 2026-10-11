@@ -85,6 +85,76 @@ function cleanupRoom(code) {
     delete rooms[code];
 }
 
+function bindRematchPartners(playerA, playerB) {
+    if (!playerA?.id || !playerB?.id || isAiId(playerA.id) || isAiId(playerB.id)) return;
+    const sockA = io.sockets.sockets.get(playerA.id);
+    const sockB = io.sockets.sockets.get(playerB.id);
+    if (sockA) {
+        sockA.data.rematchPartner = {
+            socketId: playerB.id,
+            userId: playerB.userId || null,
+            displayName: playerB.displayName || 'Opponent',
+        };
+    }
+    if (sockB) {
+        sockB.data.rematchPartner = {
+            socketId: playerA.id,
+            userId: playerA.userId || null,
+            displayName: playerA.displayName || 'Opponent',
+        };
+    }
+}
+
+function clearRematchState(socket, { notifyRequester = false } = {}) {
+    if (!socket?.data) return;
+    const pendingFrom = socket.data.pendingRematchFrom;
+    if (notifyRequester && pendingFrom) {
+        const requester = io.sockets.sockets.get(pendingFrom);
+        if (requester) {
+            requester.emit('rematchBusy', { reason: 'Opponent left' });
+        }
+    }
+    socket.data.rematchPartner = null;
+    socket.data.pendingRematchFrom = null;
+}
+
+function isSocketBusy(socketId) {
+    const found = findRoomBySocketId(socketId);
+    if (!found) return false;
+    return found.room.status === 'waiting' || found.room.status === 'ready' || found.room.status === 'playing';
+}
+
+function createPvpRematchRoom(socketA, socketB) {
+    const code = generateRoomCode();
+    rooms[code] = {
+        code,
+        vsAI: false,
+        playerOne: {
+            id: socketA.id,
+            userId: socketA.data.user.id,
+            displayName: socketA.data.user.display_name,
+            elo: socketA.data.user.elo,
+            answer: null,
+            history: [],
+            ready: false,
+        },
+        playerTwo: {
+            id: socketB.id,
+            userId: socketB.data.user.id,
+            displayName: socketB.data.user.display_name,
+            elo: socketB.data.user.elo,
+            answer: null,
+            history: [],
+            ready: false,
+        },
+        status: 'ready',
+    };
+    clearRematchState(socketA);
+    clearRematchState(socketB);
+    socketA.emit('rematchStarted', { roomId: code, playerName: 'Player One' });
+    socketB.emit('rematchStarted', { roomId: code, playerName: 'Player Two' });
+}
+
 async function finishGame(code, winnerKey) {
     const room = rooms[code];
     if (!room || room.status === 'finished') return;
@@ -104,9 +174,14 @@ async function finishGame(code, winnerKey) {
         playerTwo: room.playerTwo,
     };
 
+    if (!room.vsAI) {
+        bindRematchPartners(room.playerOne, room.playerTwo);
+    }
+
     const winPayload = {
         roomId: code,
         winner: winnerKey,
+        vsAI: !!room.vsAI,
         elo: room.vsAI
             ? {
                   playerOneDelta: 0,
@@ -522,9 +597,91 @@ io.on('connection', async (socket) => {
         }
     });
 
+    socket.on('rematchRequest', () => {
+        if (!requireSocketUser(socket)) return;
+        const partner = socket.data.rematchPartner;
+        if (!partner?.socketId) {
+            socket.emit('rematchBusy', { reason: 'No rematch partner' });
+            return;
+        }
+        if (isSocketBusy(socket.id)) {
+            socket.emit('rematchBusy', { reason: 'Finish your current game first' });
+            return;
+        }
+
+        const partnerSocket = io.sockets.sockets.get(partner.socketId);
+        if (!partnerSocket) {
+            socket.emit('rematchBusy', { reason: 'Opponent left' });
+            clearRematchState(socket);
+            return;
+        }
+        if (isSocketBusy(partner.socketId)) {
+            socket.emit('rematchBusy', { reason: 'Opponent is busy' });
+            return;
+        }
+
+        partnerSocket.data.pendingRematchFrom = socket.id;
+        partnerSocket.emit('rematchInvite', {
+            fromSocketId: socket.id,
+            fromUserId: socket.data.user?.id || null,
+            fromName: socket.data.user?.display_name || 'Opponent',
+        });
+        socket.emit('statusMessage', {
+            message: 'Rematch invite sent…',
+            type: 'info',
+        });
+    });
+
+    socket.on('rematchAccept', (msg = {}) => {
+        if (!requireSocketUser(socket)) return;
+        const fromSocketId = String(msg.fromSocketId || socket.data.pendingRematchFrom || '');
+        if (!fromSocketId) {
+            socket.emit('rematchBusy', { reason: 'Rematch expired' });
+            return;
+        }
+
+        const requester = io.sockets.sockets.get(fromSocketId);
+        if (!requester?.data?.user) {
+            socket.emit('rematchBusy', { reason: 'Opponent left' });
+            clearRematchState(socket);
+            return;
+        }
+        if (isSocketBusy(socket.id) || isSocketBusy(fromSocketId)) {
+            requester.emit('rematchBusy', { reason: 'Opponent is busy' });
+            socket.emit('rematchBusy', { reason: 'Someone is already in a game' });
+            return;
+        }
+
+        // Requester is Player One; accepter is Player Two
+        createPvpRematchRoom(requester, socket);
+    });
+
+    socket.on('rematchDecline', (msg = {}) => {
+        const fromSocketId = String(msg.fromSocketId || socket.data.pendingRematchFrom || '');
+        socket.data.pendingRematchFrom = null;
+        if (!fromSocketId) return;
+        const requester = io.sockets.sockets.get(fromSocketId);
+        if (requester) {
+            requester.emit('rematchBusy', { reason: 'Opponent declined' });
+        }
+    });
+
+    socket.on('clearRematch', () => {
+        clearRematchState(socket, { notifyRequester: true });
+    });
+
     socket.on('disconnect', () => {
         userCounter = Math.max(0, userCounter - 1);
         io.emit('usercount', userCounter);
+
+        const partnerInfo = socket.data.rematchPartner;
+        if (partnerInfo?.socketId) {
+            const partnerSocket = io.sockets.sockets.get(partnerInfo.socketId);
+            if (partnerSocket?.data?.rematchPartner?.socketId === socket.id) {
+                partnerSocket.data.rematchPartner = null;
+            }
+        }
+        clearRematchState(socket);
 
         const found = findRoomBySocketId(socket.id);
         if (!found) return;

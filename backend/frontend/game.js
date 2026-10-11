@@ -25,7 +25,7 @@
         btnHistoryBack: document.getElementById('btn-history-back'),
         historyList: document.getElementById('history-list'),
         aiEloHint: document.getElementById('ai-elo-hint'),
-        winEloHint: document.getElementById('win-elo-hint'),
+        playEloLine: document.getElementById('play-elo-line'),
         btnCreate: document.getElementById('btn-create'),
         btnVsAi: document.getElementById('btn-vs-ai'),
         btnJoin: document.getElementById('btn-join'),
@@ -40,14 +40,19 @@
         btnLeaveSecret: document.getElementById('btn-leave-secret'),
         guessInput: document.getElementById('guess-input'),
         btnResign: document.getElementById('btn-resign'),
+        playActions: document.getElementById('play-actions'),
+        endActions: document.getElementById('end-actions'),
+        btnEndHome: document.getElementById('btn-end-home'),
+        btnPlayAgain: document.getElementById('btn-play-again'),
+        rematchInviteBar: document.getElementById('rematch-invite-bar'),
+        rematchInviteText: document.getElementById('rematch-invite-text'),
+        btnRematchAccept: document.getElementById('btn-rematch-accept'),
+        btnRematchDecline: document.getElementById('btn-rematch-decline'),
         historyBoard: document.getElementById('history-board'),
         mySecretDisplay: document.getElementById('my-secret-display'),
         playStatus: document.getElementById('play-status'),
         sideRoom: document.getElementById('side-room'),
         sideRole: document.getElementById('side-role'),
-        winOverlay: document.getElementById('win-overlay'),
-        winText: document.getElementById('win-text'),
-        btnWinContinue: document.getElementById('btn-win-continue'),
         gameCon: document.querySelector('.game-con'),
         playerOneTime: document.querySelector('.player-one-time'),
         playerTwoTime: document.querySelector('.player-two-time'),
@@ -67,6 +72,9 @@
         user: null,
         config: null,
         gameEnded: false,
+        vsAI: false,
+        rematchFromSocketId: null,
+        rematchWaiting: false,
     };
 
     let playerOneTimeInterval = null;
@@ -129,33 +137,120 @@
         });
     }
 
-    function stopYouWon() {
-        els.winOverlay.classList.add('hide');
-        els.winOverlay.classList.remove('win-outcome--won', 'win-outcome--lost');
-        els.winText.classList.remove('animate-win-loss');
-        els.gameCon?.classList.remove('game-ended');
-        state.pendingWinMessage = null;
+    function playEndSound(didWin) {
+        const sources = didWin
+            ? ['GameStart.mp3', 'GameStart.wav']
+            : ['GameOver.mp3', 'GameOver.wav'];
+        const tryPlay = (i) => {
+            if (i >= sources.length) return;
+            try {
+                const audio = new Audio(sources[i]);
+                audio.volume = 0.45;
+                const p = audio.play();
+                if (p && typeof p.catch === 'function') {
+                    p.catch(() => tryPlay(i + 1));
+                }
+            } catch {
+                tryPlay(i + 1);
+            }
+        };
+        tryPlay(0);
     }
 
-    function showGameEndOverlay(text, didWin) {
+    function clearEndBanner() {
+        els.playStatus.classList.remove('status-win', 'status-lose', 'animate-win-loss');
+        if (els.playEloLine) {
+            els.playEloLine.textContent = '';
+            els.playEloLine.classList.add('hide');
+        }
+        els.gameCon?.classList.remove('game-ended');
+        els.endActions?.classList.add('hide');
+        els.playActions?.classList.remove('hide');
+        els.rematchInviteBar?.classList.add('hide');
+        if (els.btnPlayAgain) {
+            els.btnPlayAgain.textContent = 'Play again';
+            els.btnPlayAgain.disabled = false;
+        }
+        state.pendingWinMessage = null;
+        state.rematchWaiting = false;
+        state.rematchFromSocketId = null;
+    }
+
+    function showGameEndBanner(text, didWin, eloLine) {
         state.gameEnded = true;
         state.canAddGuess = false;
-        els.winText.textContent = text;
-        els.winOverlay.classList.remove('hide');
-        els.winOverlay.classList.toggle('win-outcome--won', didWin);
-        els.winOverlay.classList.toggle('win-outcome--lost', !didWin);
-        els.winText.classList.add('animate-win-loss');
+        els.playStatus.textContent = text;
+        els.playStatus.classList.remove('status-win', 'status-lose');
+        els.playStatus.classList.add(didWin ? 'status-win' : 'status-lose', 'animate-win-loss');
+        if (els.playEloLine) {
+            if (eloLine) {
+                els.playEloLine.textContent = eloLine;
+                els.playEloLine.classList.remove('hide');
+            } else {
+                els.playEloLine.textContent = '';
+                els.playEloLine.classList.add('hide');
+            }
+        }
         els.gameCon?.classList.add('game-ended');
+        els.playActions?.classList.add('hide');
+        els.endActions?.classList.remove('hide');
+        if (els.btnPlayAgain) {
+            els.btnPlayAgain.textContent = 'Play again';
+            els.btnPlayAgain.disabled = false;
+        }
         els.guessInput.value = '';
         els.guessInput.disabled = true;
         els.btnResign.disabled = true;
         stopAllTimers();
+        playEndSound(didWin);
     }
 
     function leaveAfterWin() {
         const msg = state.pendingWinMessage;
-        stopYouWon();
+        socket.emit('clearRematch');
+        clearEndBanner();
         resetToLobby(msg ? { message: msg.text, type: msg.type } : {});
+    }
+
+    function playAgain() {
+        if (state.vsAI) {
+            clearEndBanner();
+            state.roomId = null;
+            state.playerName = null;
+            state.secret = null;
+            state.secretLocked = false;
+            state.gameEnded = false;
+            state.canAddGuess = true;
+            els.historyBoard.innerHTML = '';
+            els.guessInput.disabled = false;
+            els.btnResign.disabled = false;
+            socket.emit('playVsAI');
+            return;
+        }
+        if (state.rematchWaiting) {
+            showToast('Waiting for opponent…', 'info');
+            return;
+        }
+        state.rematchWaiting = true;
+        if (els.btnPlayAgain) {
+            els.btnPlayAgain.textContent = 'Waiting…';
+            els.btnPlayAgain.disabled = true;
+        }
+        socket.emit('rematchRequest');
+    }
+
+    function hideRematchInvite() {
+        state.rematchFromSocketId = null;
+        els.rematchInviteBar?.classList.add('hide');
+    }
+
+    function showRematchInvite(fromName, fromSocketId) {
+        state.rematchFromSocketId = fromSocketId;
+        if (els.rematchInviteText) {
+            els.rematchInviteText.textContent = `${fromName || 'Opponent'} wants a rematch`;
+        }
+        els.rematchInviteBar?.classList.remove('hide');
+        showToast(`${fromName || 'Opponent'} wants a rematch`, 'info');
     }
 
     function getRandomGuess() {
@@ -227,7 +322,7 @@
     function resetToLobby(options = {}) {
         const { message, type = 'info' } = options;
         stopAllTimers();
-        stopYouWon();
+        clearEndBanner();
         state.roomId = null;
         state.playerName = null;
         state.secret = null;
@@ -235,6 +330,7 @@
         state.secretLocked = false;
         state.intentionalLeave = false;
         state.gameEnded = false;
+        state.vsAI = false;
         els.historyBoard.innerHTML = '';
         els.mySecretDisplay.textContent = '____';
         els.secretInput.value = '';
@@ -269,11 +365,16 @@
         els.btnResign.disabled = false;
         state.canAddGuess = true;
         els.playStatus.textContent = 'Your turn';
+        els.playStatus.classList.remove('status-win', 'status-lose', 'animate-win-loss');
+        if (els.playEloLine) {
+            els.playEloLine.textContent = '';
+            els.playEloLine.classList.add('hide');
+        }
 
         els.p1Label.classList.toggle('you-label', state.playerName === 'Player One');
         els.p2Label.classList.toggle('you-label', state.playerName === 'Player Two');
 
-        stopYouWon();
+        clearEndBanner();
         showScreen('play');
         startMyTimer();
         els.guessInput.focus();
@@ -458,16 +559,19 @@
 
     els.btnCreate.addEventListener('click', () => {
         if (!requireAuth()) return;
+        state.vsAI = false;
         socket.emit('createRoom');
     });
 
     els.btnVsAi.addEventListener('click', () => {
         if (!requireAuth()) return;
+        state.vsAI = true;
         socket.emit('playVsAI');
     });
 
     els.btnJoin.addEventListener('click', () => {
         if (!requireAuth()) return;
+        state.vsAI = false;
         const code = els.joinCodeInput.value.trim().toUpperCase();
         if (!code) {
             showToast('Enter a room code', 'error');
@@ -559,8 +663,26 @@
         });
     });
 
-    els.btnWinContinue.addEventListener('click', () => {
+    els.btnEndHome?.addEventListener('click', () => {
         leaveAfterWin();
+    });
+
+    els.btnPlayAgain?.addEventListener('click', () => {
+        playAgain();
+    });
+
+    els.btnRematchAccept?.addEventListener('click', () => {
+        if (!state.rematchFromSocketId) return;
+        socket.emit('rematchAccept', { fromSocketId: state.rematchFromSocketId });
+        hideRematchInvite();
+    });
+
+    els.btnRematchDecline?.addEventListener('click', () => {
+        if (state.rematchFromSocketId) {
+            socket.emit('rematchDecline', { fromSocketId: state.rematchFromSocketId });
+        }
+        hideRematchInvite();
+        showToast('Rematch declined', 'info');
     });
 
     // ——— Socket events ———
@@ -585,6 +707,7 @@
     socket.on('roomCreated', (msg) => {
         state.roomId = msg.roomId;
         state.playerName = msg.playerName;
+        state.vsAI = false;
         els.roomCodeText.textContent = msg.roomId;
         els.waitingStatus.textContent = 'Share this code with a friend';
         showScreen('waiting');
@@ -605,6 +728,8 @@
     socket.on('aiMatched', (msg) => {
         state.roomId = msg.roomId;
         state.playerName = msg.playerName;
+        state.vsAI = true;
+        state.gameEnded = false;
         const eng = msg.engine === 'neural' ? 'trained model' : 'heuristic AI';
         const eloBit = msg.aiElo != null ? ` · ${msg.aiElo} Elo` : '';
         goToSecretScreen(`vs AI (${eng}${eloBit}) — set your secret number`);
@@ -618,7 +743,38 @@
     socket.on('roomJoined', (msg) => {
         state.roomId = msg.roomId;
         state.playerName = msg.playerName;
+        state.vsAI = false;
         goToSecretScreen('Joined — set your secret number');
+    });
+
+    socket.on('rematchStarted', (msg) => {
+        hideRematchInvite();
+        clearEndBanner();
+        state.roomId = msg.roomId;
+        state.playerName = msg.playerName;
+        state.vsAI = false;
+        state.secret = null;
+        state.secretLocked = false;
+        state.gameEnded = false;
+        state.canAddGuess = true;
+        state.rematchWaiting = false;
+        els.historyBoard.innerHTML = '';
+        els.guessInput.disabled = false;
+        els.btnResign.disabled = false;
+        goToSecretScreen('Rematch — set your secret number');
+    });
+
+    socket.on('rematchInvite', (msg) => {
+        showRematchInvite(msg.fromName, msg.fromSocketId);
+    });
+
+    socket.on('rematchBusy', (msg) => {
+        state.rematchWaiting = false;
+        if (els.btnPlayAgain) {
+            els.btnPlayAgain.textContent = 'Play again';
+            els.btnPlayAgain.disabled = false;
+        }
+        showToast(msg?.reason || 'Opponent is busy', 'error');
     });
 
     socket.on('secretAccepted', (msg) => {
@@ -658,9 +814,10 @@
         if (msg.roomId !== state.roomId) return;
         if (state.gameEnded) return;
         stopAllTimers();
+        if (msg.vsAI != null) state.vsAI = !!msg.vsAI;
         const winnerName = msg.winner === 'playerTwo' ? 'Player Two' : 'Player One';
         const didWin = winnerName === state.playerName;
-        let eloLine = 'Your match history is below';
+        let eloLine = state.vsAI ? 'vs AI · rating unchanged' : '';
         if (msg.elo && state.playerName === 'Player One' && msg.elo.playerOneDelta != null) {
             const d = msg.elo.playerOneDelta;
             if (d !== 0) {
@@ -669,8 +826,8 @@
                     state.user.elo = msg.elo.playerOneElo;
                     els.profileElo.textContent = String(msg.elo.playerOneElo);
                 }
-            } else if (msg.elo.aiElo != null) {
-                eloLine = `vs AI (${msg.elo.aiElo} Elo) — rating unchanged`;
+            } else if (msg.elo.aiElo != null || state.vsAI) {
+                eloLine = 'vs AI · rating unchanged';
             }
         } else if (msg.elo && state.playerName === 'Player Two' && msg.elo.playerTwoDelta != null) {
             const d = msg.elo.playerTwoDelta;
@@ -682,12 +839,11 @@
                 }
             }
         }
-        if (els.winEloHint) els.winEloHint.textContent = eloLine;
         state.pendingWinMessage = {
             text: didWin ? 'Victory!' : 'Defeat — try again',
             type: 'info',
         };
-        showGameEndOverlay(didWin ? 'You Won!' : 'You Lost', didWin);
+        showGameEndBanner(didWin ? 'You win' : 'You lose', didWin, eloLine);
     });
 
     socket.on('eloUpdate', (msg) => {
@@ -695,16 +851,18 @@
         if (state.playerName === 'Player One' && msg.elo.playerOneElo != null) {
             state.user.elo = msg.elo.playerOneElo;
             els.profileElo.textContent = String(msg.elo.playerOneElo);
-            if (els.winEloHint && msg.elo.playerOneDelta) {
+            if (els.playEloLine && msg.elo.playerOneDelta) {
                 const d = msg.elo.playerOneDelta;
-                els.winEloHint.textContent = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerOneElo}`;
+                els.playEloLine.textContent = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerOneElo}`;
+                els.playEloLine.classList.remove('hide');
             }
         } else if (state.playerName === 'Player Two' && msg.elo.playerTwoElo != null) {
             state.user.elo = msg.elo.playerTwoElo;
             els.profileElo.textContent = String(msg.elo.playerTwoElo);
-            if (els.winEloHint && msg.elo.playerTwoDelta) {
+            if (els.playEloLine && msg.elo.playerTwoDelta) {
                 const d = msg.elo.playerTwoDelta;
-                els.winEloHint.textContent = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerTwoElo}`;
+                els.playEloLine.textContent = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerTwoElo}`;
+                els.playEloLine.classList.remove('hide');
             }
         }
     });
