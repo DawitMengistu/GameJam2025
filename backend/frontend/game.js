@@ -12,16 +12,23 @@
     const els = {
         toastRoot: document.getElementById('toast-root'),
         userCountNum: document.getElementById('user-count-num'),
+        userCountNumMobile: document.getElementById('user-count-num-mobile'),
         profileChip: document.getElementById('profile-chip'),
+        profileChipMobile: document.getElementById('profile-chip-mobile'),
         profileName: document.getElementById('profile-name'),
         profileElo: document.getElementById('profile-elo'),
+        profileNameMobile: document.getElementById('profile-name-mobile'),
+        profileEloMobile: document.getElementById('profile-elo-mobile'),
         sessionLoading: document.getElementById('session-loading'),
         authPanel: document.getElementById('auth-panel'),
         playPanel: document.getElementById('play-panel'),
         btnLoginTelegram: document.getElementById('btn-login-telegram'),
         authHint: document.getElementById('auth-hint'),
         btnLogout: document.getElementById('btn-logout'),
-        btnHistory: document.getElementById('btn-history'),
+        btnLogoutMobile: document.getElementById('btn-logout-mobile'),
+        navBrand: document.getElementById('nav-brand'),
+        navPlay: document.getElementById('nav-play'),
+        navHistory: document.getElementById('nav-history'),
         btnHistoryBack: document.getElementById('btn-history-back'),
         historyList: document.getElementById('history-list'),
         aiEloHint: document.getElementById('ai-elo-hint'),
@@ -130,11 +137,62 @@
         }, 3000);
     }
 
+    function setNavActive(which) {
+        els.navPlay?.classList.toggle('nav-link-active', which === 'play');
+        els.navHistory?.classList.toggle('nav-link-active', which === 'history');
+    }
+
     function showScreen(name) {
         state.screen = name;
         Object.entries(screens).forEach(([key, el]) => {
             el.classList.toggle('hide', key !== name);
         });
+        setNavActive(name === 'history' ? 'history' : 'play');
+    }
+
+    function syncProfileElo(elo) {
+        const text = String(elo);
+        if (els.profileElo) els.profileElo.textContent = text;
+        if (els.profileEloMobile) els.profileEloMobile.textContent = text;
+    }
+
+    function syncUserCount(count) {
+        const text = String(count);
+        if (els.userCountNum) els.userCountNum.textContent = text;
+        if (els.userCountNumMobile) els.userCountNumMobile.textContent = text;
+    }
+
+    function inActiveMatch() {
+        return Boolean(state.roomId) && !state.gameEnded &&
+            (state.screen === 'waiting' || state.screen === 'secret' || state.screen === 'play');
+    }
+
+    function goNavPlay() {
+        if (state.screen === 'history') {
+            showScreen('lobby');
+            return;
+        }
+        if (state.gameEnded && state.screen === 'play') {
+            leaveAfterWin();
+            return;
+        }
+        if (inActiveMatch()) {
+            showToast('Finish or leave the current game first', 'info');
+            return;
+        }
+        showScreen('lobby');
+    }
+
+    function goNavHistory() {
+        if (inActiveMatch()) {
+            showToast('Finish or leave the current game first', 'info');
+            return;
+        }
+        if (state.gameEnded && state.screen === 'play') {
+            showToast('Go Home first, or use Play again', 'info');
+            return;
+        }
+        openHistory();
     }
 
     function playEndSound(didWin) {
@@ -452,13 +510,18 @@
         if (user) {
             els.authPanel.classList.add('hide');
             els.playPanel.classList.remove('hide');
-            els.profileChip.classList.remove('hide');
-            els.profileName.textContent = user.display_name;
-            els.profileElo.textContent = String(user.elo);
+            els.profileChip?.classList.remove('hide');
+            els.profileChipMobile?.classList.remove('hide');
+            els.btnLogout?.classList.remove('hide');
+            if (els.profileName) els.profileName.textContent = user.display_name;
+            if (els.profileNameMobile) els.profileNameMobile.textContent = user.display_name;
+            syncProfileElo(user.elo);
         } else {
             els.authPanel.classList.remove('hide');
             els.playPanel.classList.add('hide');
-            els.profileChip.classList.add('hide');
+            els.profileChip?.classList.add('hide');
+            els.profileChipMobile?.classList.add('hide');
+            els.btnLogout?.classList.add('hide');
         }
     }
 
@@ -580,10 +643,15 @@
         socket.emit('joinRoom', { code });
     });
 
-    els.btnHistory?.addEventListener('click', () => openHistory());
     els.btnHistoryBack?.addEventListener('click', () => showScreen('lobby'));
+    els.navPlay?.addEventListener('click', () => goNavPlay());
+    els.navHistory?.addEventListener('click', () => goNavHistory());
+    els.navBrand?.addEventListener('click', (e) => {
+        e.preventDefault();
+        goNavPlay();
+    });
 
-    els.btnLogout?.addEventListener('click', async () => {
+    async function doLogout() {
         try {
             await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
         } catch {
@@ -592,7 +660,10 @@
         setLoggedInUI(null);
         showToast('Logged out', 'info');
         location.reload();
-    });
+    }
+
+    els.btnLogout?.addEventListener('click', () => doLogout());
+    els.btnLogoutMobile?.addEventListener('click', () => doLogout());
 
     els.joinCodeInput.addEventListener('input', () => {
         els.joinCodeInput.value = els.joinCodeInput.value
@@ -824,7 +895,7 @@
                 eloLine = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerOneElo}`;
                 if (state.user) {
                     state.user.elo = msg.elo.playerOneElo;
-                    els.profileElo.textContent = String(msg.elo.playerOneElo);
+                    syncProfileElo(msg.elo.playerOneElo);
                 }
             } else if (msg.elo.aiElo != null || state.vsAI) {
                 eloLine = 'vs AI · rating unchanged';
@@ -835,7 +906,7 @@
                 eloLine = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerTwoElo}`;
                 if (state.user) {
                     state.user.elo = msg.elo.playerTwoElo;
-                    els.profileElo.textContent = String(msg.elo.playerTwoElo);
+                    syncProfileElo(msg.elo.playerTwoElo);
                 }
             }
         }
@@ -850,7 +921,7 @@
         if (!msg?.elo || !state.user) return;
         if (state.playerName === 'Player One' && msg.elo.playerOneElo != null) {
             state.user.elo = msg.elo.playerOneElo;
-            els.profileElo.textContent = String(msg.elo.playerOneElo);
+            syncProfileElo(msg.elo.playerOneElo);
             if (els.playEloLine && msg.elo.playerOneDelta) {
                 const d = msg.elo.playerOneDelta;
                 els.playEloLine.textContent = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerOneElo}`;
@@ -858,7 +929,7 @@
             }
         } else if (state.playerName === 'Player Two' && msg.elo.playerTwoElo != null) {
             state.user.elo = msg.elo.playerTwoElo;
-            els.profileElo.textContent = String(msg.elo.playerTwoElo);
+            syncProfileElo(msg.elo.playerTwoElo);
             if (els.playEloLine && msg.elo.playerTwoDelta) {
                 const d = msg.elo.playerTwoDelta;
                 els.playEloLine.textContent = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerTwoElo}`;
@@ -868,17 +939,26 @@
     });
 
     socket.on('gameresigned', () => {
+        // Mid-play resign now ends via gamewin; this is only for pre-game leave races
         if (state.intentionalLeave || !state.roomId) return;
-        resetToLobby({ message: 'Game ended — someone resigned', type: 'info' });
+        if (state.screen === 'play' && !state.gameEnded) return;
+        resetToLobby({ message: 'Left the room', type: 'info' });
     });
 
-    socket.on('partnerleft', () => {
+    socket.on('partnerleft', (msg) => {
         if (state.intentionalLeave || !state.roomId) return;
+        // Mid-play disconnect is handled by server finishGame → gamewin
+        if (state.screen === 'play') {
+            if (state.gameEnded) return;
+            if (msg?.asWin) return;
+            showToast('Opponent left', 'info');
+            return;
+        }
         resetToLobby({ message: 'Your partner left the room', type: 'error' });
     });
 
     socket.on('usercount', (count) => {
-        els.userCountNum.textContent = String(count);
+        syncUserCount(count);
     });
 
     loadConfigAndMe();

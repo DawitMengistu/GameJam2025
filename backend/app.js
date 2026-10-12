@@ -550,7 +550,7 @@ io.on('connection', async (socket) => {
         tryStartGame(code);
     });
 
-    socket.on('resigngame', (msg = {}) => {
+    socket.on('resigngame', async (msg = {}) => {
         const code = String(msg.roomId ?? '').trim().toUpperCase();
         const room = rooms[code];
         if (!room) {
@@ -561,6 +561,12 @@ io.on('connection', async (socket) => {
         const key = playerKeyFromName(msg.playerName);
         if (!key || room[key]?.id !== socket.id) {
             emitError(socket, "You can't resign");
+            return;
+        }
+
+        // Mid-game resign = opponent wins (same end banner as a normal loss)
+        if (room.status === 'playing') {
+            await finishGame(code, otherKey(key));
             return;
         }
 
@@ -687,8 +693,17 @@ io.on('connection', async (socket) => {
         if (!found) return;
 
         const { code, room } = found;
-        const partner =
-            room.playerOne?.id === socket.id ? room.playerTwo : room.playerOne;
+        const leaverKey =
+            room.playerOne?.id === socket.id ? 'playerOne' : 'playerTwo';
+        const partner = room[otherKey(leaverKey)];
+
+        // Mid-play disconnect: remaining player wins on the board
+        if (room.status === 'playing' && partner && !isAiId(partner.id)) {
+            finishGame(code, otherKey(leaverKey)).catch((err) => {
+                console.warn('[disconnect] finishGame failed:', err.message);
+            });
+            return;
+        }
 
         emitToPlayer(partner, 'partnerleft', { roomId: code });
         cleanupRoom(code);
