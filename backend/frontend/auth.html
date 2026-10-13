@@ -6,50 +6,32 @@
     <title>ATP — Sign in</title>
     <link rel="stylesheet" href="font.css">
     <link rel="stylesheet" href="style.css">
-    <style>
-        .auth-loading {
-            min-height: 100vh;
-            min-height: 100dvh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 16px;
-            padding: 24px;
-            text-align: center;
-        }
-        .auth-spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(108, 154, 76, 0.25);
-            border-top-color: var(--green-main, #6c9a4c);
-            border-radius: 50%;
-            animation: auth-spin 0.7s linear infinite;
-        }
-        @keyframes auth-spin {
-            to { transform: rotate(360deg); }
-        }
-        .auth-err {
-            color: var(--red-main, #ad5a4a);
-            max-width: 320px;
-            font-size: 0.95rem;
-        }
-    </style>
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('atp-theme');
+                if (t === 'dark') document.documentElement.classList.add('dark');
+            } catch (e) { /* ignore */ }
+        })();
+    </script>
 </head>
 <body>
-    <div class="auth-loading">
+    <div class="auth-loading-page">
         <div class="auth-spinner" id="auth-spinner" aria-hidden="true"></div>
+        <p class="session-loading-text poppins-regular m-0" id="auth-loading-label">Signing you in…</p>
         <p id="auth-status" class="poppins-regular auth-err" style="display:none"></p>
     </div>
     <script>
         (async () => {
             const status = document.getElementById('auth-status');
             const spinner = document.getElementById('auth-spinner');
+            const label = document.getElementById('auth-loading-label');
             const params = new URLSearchParams(location.search);
             const token = params.get('token');
 
             function fail(msg) {
                 spinner.style.display = 'none';
+                if (label) label.style.display = 'none';
                 status.style.display = 'block';
                 status.textContent = msg;
             }

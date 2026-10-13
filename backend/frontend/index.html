@@ -11,10 +11,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
         href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
+        rel="stylesheet">    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('atp-theme');
+                if (t === 'dark') document.documentElement.classList.add('dark');
+            } catch (e) { /* ignore */ }
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
@@ -38,36 +46,43 @@
     </script>
 </head>
 
-<body class="font-sans text-ink min-h-dvh overflow-x-hidden bg-page">
+<body class="font-sans text-ink min-h-dvh overflow-x-hidden bg-page dark:bg-[#12151a] dark:text-[#e8ece4]">
     <div class="app-shell flex flex-col md:flex-row min-h-dvh">
         <!-- LEFT NAV -->
         <aside
-            class="app-nav flex md:flex-col md:w-56 shrink-0 bg-surface/90 backdrop-blur-md border-b md:border-b-0 md:border-r border-ink/10 px-3 py-3 md:py-5 gap-3 md:gap-4 z-30">
+            class="app-nav flex md:flex-col md:w-56 shrink-0 bg-surface/90 dark:bg-[#1a1f27]/90 backdrop-blur-md border-b md:border-b-0 md:border-r border-ink/10 dark:border-white/10 px-3 py-3 md:py-5 gap-3 md:gap-4 z-30">
             <div class="flex items-center justify-between md:justify-start gap-3 md:flex-col md:items-stretch w-full">
                 <a href="#" id="nav-brand"
                     class="text-2xl md:text-3xl font-semibold tracking-wide text-green-main no-underline select-none">ATP</a>
 
                 <div class="flex items-center gap-2 md:hidden">
                     <div id="profile-chip-mobile"
-                        class="hide inline-flex items-center gap-2 max-w-[42vw] bg-page px-2.5 py-1 rounded-full border border-ink/10">
+                        class="hide inline-flex items-center gap-2 max-w-[36vw] bg-page dark:bg-[#232933] px-2.5 py-1 rounded-full border border-ink/10 dark:border-white/10">
                         <span class="profile-name text-sm truncate" id="profile-name-mobile">—</span>
                         <span class="profile-elo text-xs font-semibold text-green-main bg-green-main/15 px-2 py-0.5 rounded-full"
                             id="profile-elo-mobile">100</span>
                     </div>
-                    <div class="user-counter inline-flex items-center gap-1.5 text-sm bg-page px-2.5 py-1 rounded-full border border-ink/10"
-                        aria-live="polite">
-                        <span id="user-count-num-mobile">0</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor"
-                            viewBox="0 0 16 16" aria-hidden="true" class="opacity-70">
-                            <path
-                                d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
-                        </svg>
+                    <div class="inline-flex items-center gap-1.5">
+                        <div class="user-counter inline-flex items-center gap-1.5 text-sm bg-page dark:bg-[#232933] px-2.5 py-1 rounded-full border border-ink/10 dark:border-white/10"
+                            aria-live="polite">
+                            <span id="user-count-num-mobile">0</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor"
+                                viewBox="0 0 16 16" aria-hidden="true" class="opacity-70">
+                                <path
+                                    d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
+                            </svg>
+                        </div>
+                        <button type="button" id="btn-theme-mobile" class="theme-toggle" aria-label="Toggle dark mode"
+                            title="Toggle dark mode">
+                            <span class="theme-icon-sun" aria-hidden="true">☀</span>
+                            <span class="theme-icon-moon" aria-hidden="true">☾</span>
+                        </button>
                     </div>
                 </div>
             </div>
 
             <div id="profile-chip"
-                class="hide hidden md:flex items-center gap-2.5 bg-page px-3 py-2 rounded-xl border border-ink/10">
+                class="hide hidden md:flex items-center gap-2.5 bg-page dark:bg-[#232933] px-3 py-2 rounded-xl border border-ink/10 dark:border-white/10">
                 <div class="min-w-0 flex-1">
                     <p class="profile-name text-sm font-medium truncate m-0" id="profile-name">—</p>
                     <p class="text-xs text-muted m-0 mt-0.5">Elo <span class="profile-elo font-semibold text-green-main"
@@ -80,6 +95,10 @@
                     class="nav-link nav-link-active flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
                     Play
                 </button>
+                <button type="button" id="nav-cups"
+                    class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
+                    Cups
+                </button>
                 <button type="button" id="nav-history"
                     class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
                     History
@@ -87,18 +106,25 @@
             </nav>
 
             <div class="hidden md:flex flex-col gap-3 mt-auto">
-                <div class="user-counter inline-flex items-center gap-2 text-sm text-ink bg-page px-3 py-2 rounded-xl border border-ink/10 w-fit"
-                    id="user-counter" aria-live="polite">
-                    <span id="user-count-num">0</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor"
-                        viewBox="0 0 16 16" aria-hidden="true" class="opacity-70">
-                        <path
-                            d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
-                    </svg>
-                    <span class="text-muted text-xs">online</span>
+                <div class="inline-flex items-center gap-2">
+                    <div class="user-counter inline-flex items-center gap-2 text-sm text-ink dark:text-[#e8ece4] bg-page dark:bg-[#232933] px-3 py-2 rounded-xl border border-ink/10 dark:border-white/10 w-fit"
+                        id="user-counter" aria-live="polite">
+                        <span id="user-count-num">0</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor"
+                            viewBox="0 0 16 16" aria-hidden="true" class="opacity-70">
+                            <path
+                                d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
+                        </svg>
+                        <span class="text-muted text-xs">online</span>
+                    </div>
+                    <button type="button" id="btn-theme" class="theme-toggle" aria-label="Toggle dark mode"
+                        title="Toggle dark mode">
+                        <span class="theme-icon-sun" aria-hidden="true">☀</span>
+                        <span class="theme-icon-moon" aria-hidden="true">☾</span>
+                    </button>
                 </div>
                 <button type="button" id="btn-logout"
-                    class="hide text-sm font-medium text-muted hover:text-ink px-3 py-2 rounded-xl border border-ink/15 hover:bg-page text-left transition-colors">
+                    class="hide text-sm font-medium text-muted hover:text-ink dark:hover:text-white px-3 py-2 rounded-xl border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] text-left transition-colors">
                     Log out
                 </button>
             </div>
@@ -119,7 +145,7 @@
             <!-- LOBBY -->
             <section id="screen-lobby" class="screen screen-lobby">
                 <div
-                    class="w-full max-w-md mx-auto bg-surface rounded-2xl shadow-panel border border-ink/10 p-7 sm:p-9 text-center">
+                    class="w-full max-w-md mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-7 sm:p-9 text-center">
                     <h1 class="brand text-4xl sm:text-5xl font-semibold tracking-wide text-green-main m-0">ATP</h1>
                     <p class="mt-3 mb-7 text-muted text-[0.95rem] leading-relaxed">
                         Crack your opponent’s number. No zeros. No repeats.
@@ -127,17 +153,7 @@
 
                     <div id="session-loading" class="session-loading flex flex-col items-center gap-3 py-4">
                         <div class="auth-spinner" aria-hidden="true"></div>
-                        <p class="text-sm text-muted m-0">Loading…</p>
-                    </div>
-
-                    <div id="auth-panel" class="auth-panel hide flex flex-col gap-3 mb-2">
-                        <a id="btn-login-telegram"
-                            class="inline-flex justify-center items-center w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors no-underline"
-                            href="#" target="_blank" rel="noopener">
-                            Login with Telegram
-                        </a>
-                        <p class="text-sm text-muted m-0" id="auth-hint">Share contact in the bot to get your sign-in
-                            link.</p>
+                        <p class="session-loading-text text-sm text-muted m-0">Loading…</p>
                     </div>
 
                     <div id="play-panel" class="lobby-actions hide flex flex-col gap-3.5">
@@ -151,14 +167,14 @@
                         </button>
 
                         <div class="lobby-divider flex items-center gap-3 text-muted text-xs">
-                            <span class="flex-1 h-px bg-ink/15"></span>
+                            <span class="flex-1 h-px bg-ink/15 dark:bg-white/15"></span>
                             <span>or join with a code</span>
-                            <span class="flex-1 h-px bg-ink/15"></span>
+                            <span class="flex-1 h-px bg-ink/15 dark:bg-white/15"></span>
                         </div>
 
                         <div class="join-row grid grid-cols-[1fr_auto] gap-2">
                             <input type="text" id="join-code-input"
-                                class="w-full rounded-xl border-2 border-[#d5d8d0] focus:border-green-main outline-none px-3.5 py-3 text-center tracking-wider uppercase bg-white"
+                                class="field-input w-full rounded-xl border-2 border-[#d5d8d0] dark:border-white/20 focus:border-green-main outline-none px-3.5 py-3 text-center tracking-wider uppercase bg-white dark:bg-[#12151a] dark:text-[#e8ece4]"
                                 placeholder="Room code" maxlength="6" autocomplete="off" spellcheck="false">
                             <button type="button" id="btn-join"
                                 class="rounded-xl px-4 py-3 font-medium text-white bg-blue-main hover:bg-blue-hovered transition-colors">
@@ -166,8 +182,22 @@
                             </button>
                         </div>
 
+                        <div id="auth-panel" class="auth-panel hide flex flex-col gap-2 pt-1">
+                            <div class="lobby-divider flex items-center gap-3 text-muted text-xs">
+                                <span class="flex-1 h-px bg-ink/15 dark:bg-white/15"></span>
+                                <span>optional · save Elo</span>
+                                <span class="flex-1 h-px bg-ink/15 dark:bg-white/15"></span>
+                            </div>
+                            <a id="btn-login-telegram"
+                                class="inline-flex justify-center items-center w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main/90 hover:bg-green-hovered transition-colors no-underline"
+                                href="#" target="_blank" rel="noopener">
+                                Login with Telegram
+                            </a>
+                            <p class="text-xs text-muted m-0" id="auth-hint">Optional — play as guest anytime.</p>
+                        </div>
+
                         <button type="button" id="btn-logout-mobile"
-                            class="md:hidden w-full rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 hover:bg-page hover:text-ink transition-colors">
+                            class="hide md:hidden w-full rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 hover:bg-page hover:text-ink transition-colors">
                             Log out
                         </button>
                     </div>
@@ -178,10 +208,79 @@
                 </div>
             </section>
 
+            <!-- CUPS HUB -->
+            <section id="screen-cups" class="screen screen-cups hide">
+                <div
+                    class="w-full max-w-md mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-7 sm:p-9 text-center">
+                    <h2 class="text-xl font-semibold m-0 mb-2">Cups</h2>
+                    <p class="text-sm text-muted m-0 mb-6">4-player knockout. Host starts when the lobby is full.</p>
+
+                    <div class="flex flex-col gap-3.5">
+                        <button type="button" id="btn-cup-create"
+                            class="w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors">
+                            Create Cup
+                        </button>
+
+                        <div class="lobby-divider flex items-center gap-3 text-muted text-xs">
+                            <span class="flex-1 h-px bg-ink/15 dark:bg-white/15"></span>
+                            <span>or join with a code</span>
+                            <span class="flex-1 h-px bg-ink/15 dark:bg-white/15"></span>
+                        </div>
+
+                        <div class="join-row grid grid-cols-[1fr_auto] gap-2">
+                            <input type="text" id="cup-join-input"
+                                class="field-input w-full rounded-xl border-2 border-[#d5d8d0] dark:border-white/20 focus:border-green-main outline-none px-3.5 py-3 text-center tracking-wider uppercase bg-white dark:bg-[#12151a] dark:text-[#e8ece4]"
+                                placeholder="Cup code" maxlength="6" autocomplete="off" spellcheck="false">
+                            <button type="button" id="btn-cup-join"
+                                class="rounded-xl px-4 py-3 font-medium text-white bg-blue-main hover:bg-blue-hovered transition-colors">
+                                Join
+                            </button>
+                        </div>
+
+                        <button type="button" id="btn-cups-back"
+                            class="w-full rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
+                            Back to Play
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CUP LOBBY / BRACKET -->
+            <section id="screen-cup-lobby" class="screen screen-cup-lobby hide">
+                <div
+                    class="w-full max-w-3xl mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-6 sm:p-8 text-center">
+                    <h2 class="text-xl font-semibold m-0 mb-1">Cup lobby</h2>
+                    <p class="text-sm text-muted m-0 mb-4" id="cup-lobby-status">Waiting for players…</p>
+
+                    <div class="flex items-center justify-center gap-3 flex-wrap mb-5">
+                        <span id="cup-code-text"
+                            class="room-code text-2xl sm:text-3xl font-semibold tracking-[0.28em] px-5 py-3 bg-[#f4f6f1] dark:bg-[#232933] rounded-xl border border-dashed border-green-main/50 text-green-main">------</span>
+                        <button type="button" id="btn-cup-copy"
+                            class="rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
+                            Copy
+                        </button>
+                    </div>
+
+                    <ul id="cup-player-list" class="cup-player-list text-left mb-5"></ul>
+
+                    <div id="cup-bracket-mini" class="cup-bracket-graph hide text-left mb-5" aria-label="Cup bracket"></div>
+
+                    <button type="button" id="btn-cup-start"
+                        class="hide w-full max-w-md mx-auto rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors mb-2.5 disabled:opacity-55 disabled:cursor-not-allowed"
+                        disabled>
+                        Start Cup
+                    </button>
+                    <button type="button" id="btn-cup-leave"
+                        class="w-full max-w-md mx-auto rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
+                        Leave cup
+                    </button>
+                </div>
+            </section>
+
             <!-- HISTORY -->
             <section id="screen-history" class="screen screen-history hide">
                 <div
-                    class="w-full max-w-lg mx-auto bg-surface rounded-2xl shadow-panel border border-ink/10 p-6 sm:p-8 text-left">
+                    class="w-full max-w-lg mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-6 sm:p-8 text-left">
                     <h2 class="text-xl font-semibold m-0 mb-1">Match history</h2>
                     <p class="text-sm text-muted m-0 mb-4">Recent games and Elo changes</p>
                     <div id="history-list" class="history-list"></div>
@@ -195,14 +294,14 @@
             <!-- WAITING -->
             <section id="screen-waiting" class="screen screen-waiting hide">
                 <div
-                    class="w-full max-w-md mx-auto bg-surface rounded-2xl shadow-panel border border-ink/10 p-7 sm:p-9 text-center">
+                    class="w-full max-w-md mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-7 sm:p-9 text-center">
                     <h2 class="text-xl font-semibold m-0 mb-2">Your room</h2>
                     <p class="text-sm text-muted m-0 mb-5" id="waiting-status">Share this code with a friend</p>
                     <div class="flex items-center justify-center gap-3 flex-wrap mb-6">
                         <span id="room-code-text"
-                            class="room-code text-2xl sm:text-3xl font-semibold tracking-[0.28em] px-5 py-3 bg-[#f4f6f1] rounded-xl border border-dashed border-green-main/50 text-green-main">------</span>
+                            class="room-code text-2xl sm:text-3xl font-semibold tracking-[0.28em] px-5 py-3 bg-[#f4f6f1] dark:bg-[#232933] rounded-xl border border-dashed border-green-main/50 text-green-main">------</span>
                         <button type="button" id="btn-copy-code"
-                            class="rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 hover:bg-page hover:text-ink transition-colors">
+                            class="rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
                             Copy
                         </button>
                     </div>
@@ -216,18 +315,18 @@
             <!-- SECRET -->
             <section id="screen-secret" class="screen screen-secret hide">
                 <div
-                    class="w-full max-w-md mx-auto bg-surface rounded-2xl shadow-panel border border-ink/10 p-7 sm:p-9 text-center">
+                    class="w-full max-w-md mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-7 sm:p-9 text-center">
                     <h2 class="text-xl font-semibold m-0 mb-2">Set your secret</h2>
                     <p class="text-sm text-muted m-0 mb-5" id="secret-status">Enter a 4-digit number (no 0, no repeats)
                     </p>
                     <input type="text" id="secret-input"
-                        class="w-full rounded-xl border-2 border-[#d5d8d0] focus:border-green-main outline-none px-3.5 py-3 text-center text-xl tracking-[0.35em] bg-white mb-3.5"
+                        class="field-input w-full rounded-xl border-2 border-[#d5d8d0] dark:border-white/20 focus:border-green-main outline-none px-3.5 py-3 text-center text-xl tracking-[0.35em] bg-white dark:bg-[#12151a] dark:text-[#e8ece4] mb-3.5"
                         inputmode="numeric" pattern="[1-9]*" maxlength="4" placeholder="e.g. 5821" autocomplete="off">
                     <button type="button" id="btn-set-secret"
                         class="w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors mb-2.5 disabled:opacity-55 disabled:cursor-not-allowed"
                         disabled>Lock in</button>
                     <button type="button" id="btn-leave-secret"
-                        class="w-full rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 hover:bg-page hover:text-ink transition-colors">
+                        class="w-full rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
                         Leave room
                     </button>
                 </div>
@@ -236,11 +335,27 @@
             <!-- PLAY -->
             <section id="screen-play" class="screen screen-play hide">
                 <div class="play-shell">
-                    <div class="player-one-time-con player-time-con" aria-hidden="true">
-                        <div class="player-one-time player-time"></div>
+                    <div class="digit-tracker" id="digit-tracker" aria-label="Digit notes">
+                        <button type="button" class="digit-chip" data-digit="1">1</button>
+                        <button type="button" class="digit-chip" data-digit="2">2</button>
+                        <button type="button" class="digit-chip" data-digit="3">3</button>
+                        <button type="button" class="digit-chip" data-digit="4">4</button>
+                        <button type="button" class="digit-chip" data-digit="5">5</button>
+                        <button type="button" class="digit-chip" data-digit="6">6</button>
+                        <button type="button" class="digit-chip" data-digit="7">7</button>
+                        <button type="button" class="digit-chip" data-digit="8">8</button>
+                        <button type="button" class="digit-chip" data-digit="9">9</button>
+                    </div>
+
+                    <div class="my-time-con player-time-con" aria-hidden="true">
+                        <div class="my-time player-time" id="my-time-bar"></div>
                     </div>
 
                     <div class="game-con">
+                        <div class="result-popup hide" id="result-popup" aria-live="polite">
+                            <p class="result-popup-text" id="result-popup-text">You win</p>
+                        </div>
+
                         <div class="play-end-banner" id="play-end-banner">
                             <p class="play-status font-semibold" id="play-status">Your turn</p>
                             <p class="play-elo-line hide" id="play-elo-line"></p>
@@ -248,12 +363,12 @@
 
                         <div class="top-half">
                             <div class="player-one-con player-con">
-                                <div class="player-one-name-con player-name-con center" id="p1-label">Player One</div>
+                                <div class="player-one-name-con player-name-con center" id="p1-label">You</div>
                                 <div class="player-one-n center">N</div>
                                 <div class="player-one-n center">O</div>
                             </div>
                             <div class="player-two-con player-con">
-                                <div class="player-two-name-con player-name-con center" id="p2-label">Player Two</div>
+                                <div class="player-two-name-con player-name-con center" id="p2-label">Opponent</div>
                                 <div class="player-two-n center">N</div>
                                 <div class="player-two-n center">O</div>
                             </div>
@@ -262,7 +377,7 @@
                         <div class="bottom-half" id="history-board"></div>
 
                         <div class="bottom-action-cons" id="play-actions">
-                            <input type="text" id="guess-input" class="answer-input font-medium"
+                            <input type="text" id="guess-input" class="answer-input field-input font-medium"
                                 inputmode="numeric" maxlength="4" placeholder="Your guess" autocomplete="off">
                             <button type="button" id="btn-resign"
                                 class="bottom-btn btn-started font-medium">Resign</button>
@@ -274,10 +389,15 @@
                             <button type="button" id="btn-play-again"
                                 class="bottom-btn btn-play-again font-medium">Play again</button>
                         </div>
+
+                        <div class="bottom-action-cons spectate-action-cons hide" id="spectate-actions">
+                            <button type="button" id="btn-spectate-back"
+                                class="bottom-btn btn-end-home font-medium" style="width:100%">Back to bracket</button>
+                        </div>
                     </div>
 
-                    <div class="player-two-time-con player-time-con" aria-hidden="true">
-                        <div class="player-two-time player-time"></div>
+                    <div class="opp-time-con player-time-con" aria-hidden="true">
+                        <div class="opp-time player-time" id="opp-time-bar"></div>
                     </div>
 
                     <aside class="side-bar">
@@ -287,6 +407,16 @@
                         </div>
                         <p class="side-meta" id="side-room">Room —</p>
                         <p class="side-meta" id="side-role">—</p>
+
+                        <div class="match-chat hide" id="match-chat">
+                            <div class="match-chat-title font-medium">Chat</div>
+                            <div class="match-chat-log" id="match-chat-log"></div>
+                            <div class="match-chat-compose">
+                                <textarea id="match-chat-input" class="match-chat-input field-input"
+                                    maxlength="100" rows="2" placeholder="Message…" autocomplete="off"></textarea>
+                                <p class="match-chat-hint">Enter send · Shift+Enter newline · 100 max</p>
+                            </div>
+                        </div>
                     </aside>
                 </div>
             </section>

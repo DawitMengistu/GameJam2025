@@ -1,8 +1,71 @@
 (() => {
     const socket = io();
 
+    const PLAY_STATE_KEY = 'atp-play-state';
+    const SESSION_KEY = 'atp-session-id';
+
+    function getOrCreateSessionId() {
+        try {
+            let id = localStorage.getItem(SESSION_KEY);
+            if (!id) {
+                id =
+                    typeof crypto !== 'undefined' && crypto.randomUUID
+                        ? crypto.randomUUID()
+                        : `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+                localStorage.setItem(SESSION_KEY, id);
+            }
+            return id;
+        } catch {
+            return `s-${Date.now()}`;
+        }
+    }
+
+    const sessionId = getOrCreateSessionId();
+
+    function persistPlayState() {
+        try {
+            const payload = {
+                sessionId,
+                cupCode: state.cupId || null,
+                roomId: state.roomId || null,
+                playerName: state.playerName || null,
+                cupMatchId: state.cupMatchId || null,
+                screenHint: state.screen || null,
+                vsAI: !!state.vsAI,
+                updatedAt: Date.now(),
+            };
+            if (!payload.cupCode && !payload.roomId) {
+                localStorage.removeItem(PLAY_STATE_KEY);
+                return;
+            }
+            localStorage.setItem(PLAY_STATE_KEY, JSON.stringify(payload));
+        } catch {
+            /* ignore */
+        }
+    }
+
+    function clearPlayState() {
+        try {
+            localStorage.removeItem(PLAY_STATE_KEY);
+        } catch {
+            /* ignore */
+        }
+    }
+
+    function readPlayState() {
+        try {
+            const raw = localStorage.getItem(PLAY_STATE_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch {
+            return null;
+        }
+    }
+
     const screens = {
         lobby: document.getElementById('screen-lobby'),
+        cups: document.getElementById('screen-cups'),
+        cupLobby: document.getElementById('screen-cup-lobby'),
         history: document.getElementById('screen-history'),
         waiting: document.getElementById('screen-waiting'),
         secret: document.getElementById('screen-secret'),
@@ -28,8 +91,24 @@
         btnLogoutMobile: document.getElementById('btn-logout-mobile'),
         navBrand: document.getElementById('nav-brand'),
         navPlay: document.getElementById('nav-play'),
+        navCups: document.getElementById('nav-cups'),
         navHistory: document.getElementById('nav-history'),
         btnHistoryBack: document.getElementById('btn-history-back'),
+        btnCupsBack: document.getElementById('btn-cups-back'),
+        btnCupCreate: document.getElementById('btn-cup-create'),
+        btnCupJoin: document.getElementById('btn-cup-join'),
+        cupJoinInput: document.getElementById('cup-join-input'),
+        cupCodeText: document.getElementById('cup-code-text'),
+        cupLobbyStatus: document.getElementById('cup-lobby-status'),
+        cupPlayerList: document.getElementById('cup-player-list'),
+        btnCupCopy: document.getElementById('btn-cup-copy'),
+        btnCupStart: document.getElementById('btn-cup-start'),
+        btnCupLeave: document.getElementById('btn-cup-leave'),
+        cupBracketMini: document.getElementById('cup-bracket-mini'),
+        spectateActions: document.getElementById('spectate-actions'),
+        btnSpectateBack: document.getElementById('btn-spectate-back'),
+        btnTheme: document.getElementById('btn-theme'),
+        btnThemeMobile: document.getElementById('btn-theme-mobile'),
         historyList: document.getElementById('history-list'),
         aiEloHint: document.getElementById('ai-elo-hint'),
         playEloLine: document.getElementById('play-elo-line'),
@@ -61,10 +140,16 @@
         sideRoom: document.getElementById('side-room'),
         sideRole: document.getElementById('side-role'),
         gameCon: document.querySelector('.game-con'),
-        playerOneTime: document.querySelector('.player-one-time'),
-        playerTwoTime: document.querySelector('.player-two-time'),
+        myTime: document.getElementById('my-time-bar'),
+        oppTime: document.getElementById('opp-time-bar'),
         p1Label: document.getElementById('p1-label'),
         p2Label: document.getElementById('p2-label'),
+        digitTracker: document.getElementById('digit-tracker'),
+        resultPopup: document.getElementById('result-popup'),
+        resultPopupText: document.getElementById('result-popup-text'),
+        matchChat: document.getElementById('match-chat'),
+        matchChatLog: document.getElementById('match-chat-log'),
+        matchChatInput: document.getElementById('match-chat-input'),
     };
 
     const state = {
@@ -82,12 +167,32 @@
         vsAI: false,
         rematchFromSocketId: null,
         rematchWaiting: false,
+        cupId: null,
+        cupAdminId: null,
+        cupStatus: null,
+        cupBracket: null,
+        cupMatchId: null,
+        intentionalCupLeave: false,
+        spectating: false,
+        spectateMatchId: null,
+        spectateRoomId: null,
+        opponentName: null,
+        lastP1History: [],
+        lastP2History: [],
+        highlightGuesses: false,
+        /** Secrets under review: P1's number / P2's number (targets of opponent guesses) */
+        reviewP1Secret: null,
+        reviewP2Secret: null,
     };
 
-    let playerOneTimeInterval = null;
-    let playerTwoTimeInterval = null;
-    let playerOneHeight = 600;
-    let playerTwoHeight = 600;
+    let myTimeInterval = null;
+    let myTurnEndsAt = 0;
+    let resultPopupTimer = null;
+    const TURN_MS_CLIENT = 60_000;
+    const DIGIT_STATES = ['default', 'in', 'out'];
+    const digitNotes = Object.fromEntries(
+        Array.from({ length: 9 }, (_, i) => [String(i + 1), 'default'])
+    );
 
     function validateNumber(input) {
         const value = String(input ?? '').trim();
@@ -139,15 +244,340 @@
 
     function setNavActive(which) {
         els.navPlay?.classList.toggle('nav-link-active', which === 'play');
+        els.navCups?.classList.toggle('nav-link-active', which === 'cups');
         els.navHistory?.classList.toggle('nav-link-active', which === 'history');
     }
 
     function showScreen(name) {
         state.screen = name;
         Object.entries(screens).forEach(([key, el]) => {
-            el.classList.toggle('hide', key !== name);
+            el?.classList.toggle('hide', key !== name);
         });
-        setNavActive(name === 'history' ? 'history' : 'play');
+        if (name === 'history') setNavActive('history');
+        else if (name === 'cups' || name === 'cupLobby') setNavActive('cups');
+        else setNavActive('play');
+        persistPlayState();
+    }
+
+    function applyTheme(theme) {
+        const dark = theme === 'dark';
+        document.documentElement.classList.toggle('dark', dark);
+        try {
+            localStorage.setItem('atp-theme', dark ? 'dark' : 'light');
+        } catch {
+            /* ignore */
+        }
+    }
+
+    function toggleTheme() {
+        const next = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
+        applyTheme(next);
+    }
+
+    function inCupLobby() {
+        return Boolean(state.cupId) && state.screen === 'cupLobby';
+    }
+
+    function goNavCups() {
+        if (state.spectating) {
+            exitSpectate();
+            return;
+        }
+        if (inLivePlay()) {
+            showToast('Finish the current game first', 'info');
+            return;
+        }
+        if (inSetupMatch()) {
+            showToast('Finish or leave the current game first', 'info');
+            return;
+        }
+        if (state.cupId && state.cupStatus === 'lobby') {
+            showScreen('cupLobby');
+            return;
+        }
+        if (state.cupId && (state.cupStatus === 'running' || state.cupStatus === 'finished')) {
+            showScreen('cupLobby');
+            return;
+        }
+        showScreen('cups');
+    }
+
+    function canSpectateMatch(m) {
+        if (!m) return false;
+        const inMatch = (m.playerIds || []).includes(sessionId);
+        if (inMatch && (m.status === 'ready' || m.status === 'playing')) return false;
+        return m.status === 'playing' || m.status === 'done' || m.status === 'ready';
+    }
+
+    function renderCupBracketMini(bracket) {
+        if (!els.cupBracketMini) return;
+        if (!bracket?.matches) {
+            els.cupBracketMini.classList.add('hide');
+            els.cupBracketMini.innerHTML = '';
+            return;
+        }
+
+        const card = (id, areaClass) => {
+            const m = bracket.matches[id];
+            if (!m) return '';
+            const names = (m.playerNames || ['TBD', 'TBD']).join(' vs ');
+            const status =
+                m.status === 'done'
+                    ? `Winner: ${m.winnerName || '—'}`
+                    : m.status === 'playing'
+                      ? 'Live'
+                      : m.status === 'ready'
+                        ? 'Setting secrets'
+                        : 'Pending';
+            const liveClass =
+                m.status === 'playing' ? ' is-live' : m.status === 'done' ? ' is-done' : '';
+            const watch =
+                canSpectateMatch(m) && (m.status === 'playing' || m.status === 'done')
+                    ? `<button type="button" class="cup-watch-btn" data-cup-watch="${m.id}">${
+                          m.status === 'done' ? 'View board' : 'Watch'
+                      }</button>`
+                    : '';
+            return `<div class="cup-match-row${liveClass} ${areaClass}">
+                <div class="cup-match-label">${m.label}</div>
+                <div class="cup-match-names">${names}</div>
+                <div class="cup-match-status">${status}</div>
+                ${watch}
+            </div>`;
+        };
+
+        els.cupBracketMini.innerHTML = `
+            ${card('sf1', 'cup-bracket-sf1')}
+            ${card('sf2', 'cup-bracket-sf2')}
+            <div class="cup-bracket-connector" aria-hidden="true">→</div>
+            ${card('final', 'cup-bracket-final')}
+        `;
+        els.cupBracketMini.classList.remove('hide');
+
+        els.cupBracketMini.querySelectorAll('[data-cup-watch]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const matchId = btn.getAttribute('data-cup-watch');
+                if (!matchId || !state.cupId) return;
+                socket.emit('cupSpectate', { matchId, cupCode: state.cupId });
+            });
+        });
+    }
+
+    function exitSpectate() {
+        state.spectating = false;
+        state.spectateMatchId = null;
+        state.spectateRoomId = null;
+        els.gameCon?.classList.remove('spectating', 'game-ended');
+        els.spectateActions?.classList.add('hide');
+        els.playActions?.classList.remove('hide');
+        els.endActions?.classList.add('hide');
+        els.playStatus.classList.remove('status-win', 'status-lose', 'animate-win-loss');
+        if (els.playEloLine) {
+            els.playEloLine.textContent = '';
+            els.playEloLine.classList.add('hide');
+        }
+        els.historyBoard.innerHTML = '';
+        els.mySecretDisplay.textContent = '____';
+        els.p1Label?.classList.remove('you-label');
+        els.p2Label?.classList.remove('you-label');
+        els.digitTracker?.classList.remove('hide');
+        showScreen('cupLobby');
+    }
+
+    function enterSpectate(snapshot) {
+        if (!snapshot) return;
+        state.spectating = true;
+        state.spectateMatchId = snapshot.matchId;
+        state.spectateRoomId = snapshot.roomId || null;
+        state.gameEnded = false;
+        stopAllTimers();
+
+        els.gameCon?.classList.add('spectating');
+        els.gameCon?.classList.remove('game-ended');
+        els.playActions?.classList.add('hide');
+        els.endActions?.classList.add('hide');
+        els.spectateActions?.classList.remove('hide');
+
+        els.playStatus.textContent = `Spectating · ${snapshot.label || 'Match'}`;
+        els.playStatus.classList.remove('status-win', 'status-lose', 'animate-win-loss');
+        if (els.playEloLine) {
+            els.playEloLine.textContent = snapshot.live
+                ? 'Live view · read only'
+                : snapshot.winnerName
+                  ? `Final · ${snapshot.winnerName} won`
+                  : 'Match board';
+            els.playEloLine.classList.remove('hide');
+        }
+
+        applyBoardLabels({
+            p1Name: snapshot.playerOneName || 'Player One',
+            p2Name: snapshot.playerTwoName || 'Player Two',
+        });
+        els.mySecretDisplay.textContent = '····';
+        els.sideRoom.textContent = `Cup ${snapshot.cupCode || state.cupId || '—'}`;
+        els.sideRole.textContent = 'Spectator';
+        els.matchChat?.classList.add('hide');
+        els.digitTracker?.classList.add('hide');
+
+        state.highlightGuesses =
+            !snapshot.live || snapshot.status === 'done' || Boolean(snapshot.winnerName);
+        state.reviewP1Secret = snapshot.playerOneSecret || null;
+        state.reviewP2Secret = snapshot.playerTwoSecret || null;
+        renderResults(
+            snapshot.playerOneHistory || [],
+            snapshot.playerTwoHistory || []
+        );
+        showScreen('play');
+    }
+
+    function renderCupLobby(payload, { forceScreen = true } = {}) {
+        if (!payload) return;
+        state.cupId = payload.code;
+        state.cupAdminId = payload.adminId;
+        state.cupStatus = payload.status;
+        state.cupBracket = payload.bracket || null;
+        const max = payload.maxPlayers || 4;
+        const count = payload.players?.length || 0;
+        const isAdmin = payload.adminId === sessionId;
+
+        if (els.cupCodeText) els.cupCodeText.textContent = payload.code;
+        if (els.cupLobbyStatus) {
+            if (payload.status === 'finished') {
+                els.cupLobbyStatus.textContent = payload.championName
+                    ? `Champion: ${payload.championName}`
+                    : 'Cup finished';
+            } else if (payload.status === 'running') {
+                els.cupLobbyStatus.textContent = 'Cup in progress';
+            } else {
+                els.cupLobbyStatus.textContent = `${count} / ${max} players${
+                    isAdmin ? ' · you are host' : ''
+                }`;
+            }
+        }
+
+        if (els.cupPlayerList) {
+            els.cupPlayerList.innerHTML = (payload.players || [])
+                .map((p) => {
+                    const you =
+                        p.sessionId === sessionId || p.id === socket.id;
+                    const offline = p.online === false;
+                    const badges = [
+                        p.isAdmin
+                            ? '<span class="cup-player-badge">Host</span>'
+                            : '',
+                        offline
+                            ? '<span class="cup-player-badge cup-player-offline">Offline</span>'
+                            : '',
+                    ].join('');
+                    return `<li class="cup-player-row${you ? ' cup-player-you' : ''}${
+                        offline ? ' cup-player-away' : ''
+                    }">
+                        <span class="font-medium truncate">${p.displayName}${
+                        you ? ' (you)' : ''
+                    }</span>
+                        ${badges}
+                    </li>`;
+                })
+                .join('');
+        }
+
+        renderCupBracketMini(payload.bracket);
+
+        if (els.btnCupStart) {
+            const canStart =
+                isAdmin && payload.status === 'lobby' && count === max;
+            els.btnCupStart.classList.toggle('hide', !isAdmin || payload.status !== 'lobby');
+            els.btnCupStart.disabled = !canStart;
+            els.btnCupStart.textContent = canStart
+                ? 'Start Cup'
+                : `Start Cup (${count}/${max})`;
+        }
+
+        if (els.btnCupLeave) {
+            els.btnCupLeave.classList.toggle('hide', payload.status !== 'lobby');
+        }
+
+        if (
+            forceScreen &&
+            (payload.status === 'lobby' ||
+                payload.status === 'running' ||
+                payload.status === 'finished') &&
+            state.screen !== 'play' &&
+            state.screen !== 'secret'
+        ) {
+            showScreen('cupLobby');
+        }
+    }
+
+    function returnToCupHub() {
+        if (state.spectating) {
+            exitSpectate();
+            return;
+        }
+        clearEndBanner();
+        state.roomId = null;
+        state.playerName = null;
+        state.secret = null;
+        state.secretLocked = false;
+        state.gameEnded = false;
+        state.canAddGuess = true;
+        state.cupMatchId = null;
+        els.historyBoard.innerHTML = '';
+        els.guessInput.disabled = false;
+        els.btnResign.disabled = false;
+        els.gameCon?.classList.remove('spectating');
+        els.spectateActions?.classList.add('hide');
+        resetDigitTracker();
+        clearMatchChat();
+        els.matchChat?.classList.add('hide');
+        showScreen('cupLobby');
+    }
+
+    function clearCupState() {
+        state.cupId = null;
+        state.cupAdminId = null;
+        state.cupStatus = null;
+        state.cupBracket = null;
+        state.cupMatchId = null;
+        state.intentionalCupLeave = false;
+        state.spectating = false;
+        state.spectateMatchId = null;
+        state.spectateRoomId = null;
+        if (els.cupPlayerList) els.cupPlayerList.innerHTML = '';
+        if (els.cupCodeText) els.cupCodeText.textContent = '------';
+        if (els.cupJoinInput) els.cupJoinInput.value = '';
+        if (els.cupBracketMini) {
+            els.cupBracketMini.classList.add('hide');
+            els.cupBracketMini.innerHTML = '';
+        }
+        els.btnCupStart?.classList.add('hide');
+        els.gameCon?.classList.remove('spectating');
+        els.spectateActions?.classList.add('hide');
+        if (els.btnCupLeave) {
+            els.btnCupLeave.classList.remove('hide');
+            els.btnCupLeave.textContent = 'Leave cup';
+        }
+        clearPlayState();
+    }
+
+    function leaveCup() {
+        if (!state.cupId) {
+            showScreen('cups');
+            return;
+        }
+        if (state.cupStatus === 'finished') {
+            clearCupState();
+            showScreen('cups');
+            return;
+        }
+        if (state.cupStatus !== 'lobby') {
+            showToast('Cannot leave after the cup has started', 'info');
+            return;
+        }
+        state.intentionalCupLeave = true;
+        socket.emit('cupLeave');
+        clearCupState();
+        showScreen('cups');
+        showToast('Left the cup', 'info');
     }
 
     function syncProfileElo(elo) {
@@ -162,13 +592,26 @@
         if (els.userCountNumMobile) els.userCountNumMobile.textContent = text;
     }
 
-    function inActiveMatch() {
+    function inLivePlay() {
+        return state.screen === 'play' && Boolean(state.roomId) && !state.gameEnded;
+    }
+
+    function inSetupMatch() {
         return Boolean(state.roomId) && !state.gameEnded &&
-            (state.screen === 'waiting' || state.screen === 'secret' || state.screen === 'play');
+            (state.screen === 'waiting' || state.screen === 'secret');
     }
 
     function goNavPlay() {
-        if (state.screen === 'history') {
+        if (state.screen === 'history' || state.screen === 'cups' || state.screen === 'cupLobby') {
+            if (inCupLobby() && state.cupStatus === 'lobby') {
+                showToast('Leave the cup first, or stay on Cups', 'info');
+                return;
+            }
+            // Return to endgame board if still there; else lobby
+            if (state.gameEnded && state.roomId) {
+                showScreen('play');
+                return;
+            }
             showScreen('lobby');
             return;
         }
@@ -176,7 +619,7 @@
             leaveAfterWin();
             return;
         }
-        if (inActiveMatch()) {
+        if (inLivePlay() || inSetupMatch() || inCupLobby()) {
             showToast('Finish or leave the current game first', 'info');
             return;
         }
@@ -184,12 +627,13 @@
     }
 
     function goNavHistory() {
-        if (inActiveMatch()) {
-            showToast('Finish or leave the current game first', 'info');
+        // Only block during an active live match
+        if (inLivePlay()) {
+            showToast('Finish the current game first', 'info');
             return;
         }
-        if (state.gameEnded && state.screen === 'play') {
-            showToast('Go Home first, or use Play again', 'info');
+        if (inCupLobby() && state.cupStatus === 'lobby') {
+            showToast('Leave the cup lobby first', 'info');
             return;
         }
         openHistory();
@@ -215,7 +659,21 @@
         tryPlay(0);
     }
 
+    function playChatSound() {
+        try {
+            const audio = new Audio(
+                'universfield-message-notification-199577.mp3'
+            );
+            audio.volume = 0.5;
+            const p = audio.play();
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch {
+            /* ignore */
+        }
+    }
+
     function clearEndBanner() {
+        hideResultPopup();
         els.playStatus.classList.remove('status-win', 'status-lose', 'animate-win-loss');
         if (els.playEloLine) {
             els.playEloLine.textContent = '';
@@ -234,12 +692,100 @@
         state.rematchFromSocketId = null;
     }
 
+    function resetDigitTracker() {
+        for (const d of Object.keys(digitNotes)) digitNotes[d] = 'default';
+        els.digitTracker?.querySelectorAll('.digit-chip').forEach((btn) => {
+            btn.classList.remove('state-in', 'state-out');
+        });
+    }
+
+    function cycleDigitChip(btn) {
+        const digit = btn?.dataset?.digit;
+        if (!digit || !digitNotes[digit]) return;
+        const idx = DIGIT_STATES.indexOf(digitNotes[digit]);
+        const next = DIGIT_STATES[(idx + 1) % DIGIT_STATES.length];
+        digitNotes[digit] = next;
+        btn.classList.toggle('state-in', next === 'in');
+        btn.classList.toggle('state-out', next === 'out');
+    }
+
+    function escapeChatHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function clearMatchChat() {
+        if (els.matchChatLog) els.matchChatLog.innerHTML = '';
+        if (els.matchChatInput) els.matchChatInput.value = '';
+    }
+
+    function syncMatchChatVisibility() {
+        const show =
+            state.screen === 'play' &&
+            !!state.roomId &&
+            !state.vsAI &&
+            !state.spectating;
+        els.matchChat?.classList.toggle('hide', !show);
+    }
+
+    function appendChatMessage({ from, text, isMe, playSound = false }) {
+        if (!els.matchChatLog || !text) return;
+        const row = document.createElement('div');
+        row.className = `match-chat-msg ${isMe ? 'is-me' : 'is-them'}`;
+        row.innerHTML = `<div class="match-chat-bubble">${escapeChatHtml(
+            text
+        )}</div><span class="chat-from">${escapeChatHtml(
+            from || (isMe ? 'You' : 'Opponent')
+        )}</span>`;
+        els.matchChatLog.appendChild(row);
+        els.matchChatLog.scrollTop = els.matchChatLog.scrollHeight;
+        if (playSound) playChatSound();
+    }
+
+    function sendMatchChat() {
+        if (!state.roomId || state.vsAI || state.spectating || state.gameEnded) return;
+        const raw = (els.matchChatInput?.value || '').slice(0, 100);
+        const text = raw.replace(/\r/g, '').trimEnd();
+        if (!text.trim()) return;
+        socket.emit('chatSend', { roomId: state.roomId, text, sessionId });
+        if (els.matchChatInput) els.matchChatInput.value = '';
+    }
+
+    function hideResultPopup() {
+        clearTimeout(resultPopupTimer);
+        resultPopupTimer = null;
+        els.resultPopup?.classList.add('hide');
+    }
+
+    function showResultPopup(didWin) {
+        if (!els.resultPopup || !els.resultPopupText) return;
+        hideResultPopup();
+        els.resultPopupText.textContent = didWin ? 'You win' : 'You lost';
+        els.resultPopupText.classList.toggle('is-win', didWin);
+        els.resultPopupText.classList.toggle('is-lose', !didWin);
+        // Restart CSS animation
+        els.resultPopupText.style.animation = 'none';
+        void els.resultPopupText.offsetWidth;
+        els.resultPopupText.style.animation = '';
+        els.resultPopup.classList.remove('hide');
+        resultPopupTimer = setTimeout(() => {
+            els.resultPopup.classList.add('hide');
+            resultPopupTimer = null;
+            if (state.gameEnded && !state.spectating) {
+                els.endActions?.classList.remove('hide');
+            }
+        }, 1400);
+    }
+
     function showGameEndBanner(text, didWin, eloLine) {
         state.gameEnded = true;
         state.canAddGuess = false;
-        els.playStatus.textContent = text;
-        els.playStatus.classList.remove('status-win', 'status-lose');
-        els.playStatus.classList.add(didWin ? 'status-win' : 'status-lose', 'animate-win-loss');
+        state.highlightGuesses = true;
+        els.playStatus.textContent = 'Match over';
+        els.playStatus.classList.remove('status-win', 'status-lose', 'animate-win-loss');
         if (els.playEloLine) {
             if (eloLine) {
                 els.playEloLine.textContent = eloLine;
@@ -251,26 +797,41 @@
         }
         els.gameCon?.classList.add('game-ended');
         els.playActions?.classList.add('hide');
-        els.endActions?.classList.remove('hide');
+        els.endActions?.classList.add('hide');
         if (els.btnPlayAgain) {
-            els.btnPlayAgain.textContent = 'Play again';
+            els.btnPlayAgain.textContent = state.cupId ? 'Back to cup' : 'Play again';
             els.btnPlayAgain.disabled = false;
+        }
+        if (els.btnEndHome) {
+            els.btnEndHome.textContent = state.cupId ? 'Cup lobby' : 'Home';
         }
         els.guessInput.value = '';
         els.guessInput.disabled = true;
         els.btnResign.disabled = true;
         stopAllTimers();
+        refreshHistoryHighlights();
         playEndSound(didWin);
+        showResultPopup(didWin);
+        void text;
     }
 
     function leaveAfterWin() {
         const msg = state.pendingWinMessage;
         socket.emit('clearRematch');
+        if (state.cupId) {
+            returnToCupHub();
+            if (msg) showToast(msg.text, msg.type || 'info');
+            return;
+        }
         clearEndBanner();
         resetToLobby(msg ? { message: msg.text, type: msg.type } : {});
     }
 
     function playAgain() {
+        if (state.cupId) {
+            returnToCupHub();
+            return;
+        }
         if (state.vsAI) {
             clearEndBanner();
             state.roomId = null;
@@ -282,7 +843,7 @@
             els.historyBoard.innerHTML = '';
             els.guessInput.disabled = false;
             els.btnResign.disabled = false;
-            socket.emit('playVsAI');
+            socket.emit('playVsAI', { sessionId });
             return;
         }
         if (state.rematchWaiting) {
@@ -320,61 +881,48 @@
         return Array.from(digits).join('');
     }
 
-    function startPlayerOneTime() {
-        stopPlayerOneTime();
-        playerOneHeight = 600;
-        els.playerOneTime.style.height = '100%';
-        playerOneTimeInterval = setInterval(() => {
-            if (playerOneHeight > 4) {
-                playerOneHeight -= 0.1;
-                els.playerOneTime.style.height = `${playerOneHeight}px`;
-            } else {
-                stopPlayerOneTime();
-                submitGuess(getRandomGuess());
-            }
-        }, 10);
-    }
-
-    function startPlayerTwoTime() {
-        stopPlayerTwoTime();
-        playerTwoHeight = 600;
-        els.playerTwoTime.style.height = '100%';
-        playerTwoTimeInterval = setInterval(() => {
-            if (playerTwoHeight > 4) {
-                playerTwoHeight -= 0.1;
-                els.playerTwoTime.style.height = `${playerTwoHeight}px`;
-            } else {
-                stopPlayerTwoTime();
-                submitGuess(getRandomGuess());
-            }
-        }, 10);
-    }
-
-    function stopPlayerOneTime() {
-        clearInterval(playerOneTimeInterval);
-        playerOneTimeInterval = null;
-    }
-
-    function stopPlayerTwoTime() {
-        clearInterval(playerTwoTimeInterval);
-        playerTwoTimeInterval = null;
+    function stopMyTimer() {
+        clearInterval(myTimeInterval);
+        myTimeInterval = null;
+        myTurnEndsAt = 0;
     }
 
     function stopAllTimers() {
-        stopPlayerOneTime();
-        stopPlayerTwoTime();
-        els.playerOneTime.style.height = '100%';
-        els.playerTwoTime.style.height = '100%';
+        stopMyTimer();
+        if (els.myTime) els.myTime.style.height = '100%';
+        if (els.oppTime) els.oppTime.style.height = '100%';
     }
 
-    function startMyTimer() {
-        if (state.playerName === 'Player One') startPlayerOneTime();
-        else startPlayerTwoTime();
+    function paintMyTimerBar(msLeft) {
+        if (!els.myTime) return;
+        const frac = Math.max(0, Math.min(1, msLeft / TURN_MS_CLIENT));
+        els.myTime.style.height = `${Math.max(2, frac * 100)}%`;
     }
 
-    function stopMyTimer() {
-        if (state.playerName === 'Player One') stopPlayerOneTime();
-        else stopPlayerTwoTime();
+    /** Server-authoritative remaining ms — refresh must not reset to full. */
+    function startMyTimer(turnMsRemaining) {
+        if (state.spectating || state.gameEnded) return;
+        stopMyTimer();
+        const remaining = Math.max(
+            0,
+            Math.min(
+                TURN_MS_CLIENT,
+                turnMsRemaining == null ? TURN_MS_CLIENT : Number(turnMsRemaining)
+            )
+        );
+        myTurnEndsAt = Date.now() + remaining;
+        paintMyTimerBar(remaining);
+        myTimeInterval = setInterval(() => {
+            const left = Math.max(0, myTurnEndsAt - Date.now());
+            paintMyTimerBar(left);
+            if (left <= 0) {
+                stopMyTimer();
+                // Server also expires this turn; client nudge for snappy UX
+                if (state.canAddGuess && !state.gameEnded) {
+                    submitGuess(getRandomGuess());
+                }
+            }
+        }, 50);
     }
 
     function resetToLobby(options = {}) {
@@ -388,7 +936,13 @@
         state.secretLocked = false;
         state.intentionalLeave = false;
         state.gameEnded = false;
+        state.highlightGuesses = false;
+        state.lastP1History = [];
+        state.lastP2History = [];
+        state.reviewP1Secret = null;
+        state.reviewP2Secret = null;
         state.vsAI = false;
+        state.cupMatchId = null;
         els.historyBoard.innerHTML = '';
         els.mySecretDisplay.textContent = '____';
         els.secretInput.value = '';
@@ -399,8 +953,80 @@
         els.btnSetSecret.disabled = true;
         els.p1Label.classList.remove('you-label');
         els.p2Label.classList.remove('you-label');
+        if (!state.cupId) clearPlayState();
+        resetDigitTracker();
+        clearMatchChat();
+        els.matchChat?.classList.add('hide');
+        hideResultPopup();
         showScreen('lobby');
         if (message) showToast(message, type);
+    }
+
+    function applyRoomResume(room) {
+        if (!room?.roomId) return;
+        state.roomId = room.roomId;
+        state.playerName = room.playerName;
+        state.vsAI = !!room.vsAI;
+        state.cupId = room.cupId || state.cupId;
+        state.cupMatchId = room.cupMatchId || state.cupMatchId;
+        state.gameEnded = false;
+        state.spectating = false;
+        clearEndBanner();
+
+        if (room.status === 'playing' && room.secretLocked && room.secret) {
+            state.secret = room.secret;
+            state.secretLocked = true;
+            els.historyBoard.innerHTML = '';
+            const canGuess = room.canAddGuess !== false;
+            enterPlay({
+                turnMsRemaining: room.turnMsRemaining,
+                startTimer: canGuess,
+            });
+            renderResults(room.playerOneHistory || [], room.playerTwoHistory || []);
+            state.canAddGuess = canGuess;
+            els.playStatus.textContent = canGuess
+                ? 'Your turn'
+                : 'Waiting for opponent…';
+            showToast('Rejoined match', 'info');
+            return;
+        }
+
+        if (room.status === 'waiting') {
+            els.roomCodeText.textContent = room.roomId;
+            els.waitingStatus.textContent = 'Rejoined — waiting for opponent';
+            showScreen('waiting');
+            showToast('Rejoined room', 'info');
+            return;
+        }
+
+        // ready / secret setup
+        if (room.secretLocked && room.secret) {
+            state.secret = room.secret;
+            state.secretLocked = true;
+            els.secretInput.value = room.secret;
+            els.secretInput.disabled = true;
+            els.btnSetSecret.disabled = true;
+            els.secretStatus.textContent = 'Secret locked in — waiting for opponent…';
+            showScreen('secret');
+        } else {
+            goToSecretScreen('Rejoined — set your secret number');
+        }
+        showToast('Rejoined room', 'info');
+    }
+
+    function applySessionRestored(msg) {
+        if (!msg) return;
+        if (!msg.cup && !msg.room) return;
+        if (msg.cup) {
+            renderCupLobby(msg.cup, { forceScreen: !msg.room });
+            if (!msg.room) {
+                showToast('Rejoined cup', 'info');
+            }
+        }
+        if (msg.room) {
+            applyRoomResume(msg.room);
+        }
+        persistPlayState();
     }
 
     function goToSecretScreen(statusText) {
@@ -413,11 +1039,19 @@
         els.secretInput.focus();
     }
 
-    function enterPlay() {
+    function enterPlay(opts = {}) {
         state.gameEnded = false;
+        state.highlightGuesses = false;
+        state.reviewP1Secret = null;
+        state.reviewP2Secret = null;
+        state.spectating = false;
+        state.spectateMatchId = null;
+        state.spectateRoomId = null;
+        els.gameCon?.classList.remove('spectating');
+        els.spectateActions?.classList.add('hide');
         els.mySecretDisplay.textContent = state.secret;
         els.sideRoom.textContent = `Room ${state.roomId}`;
-        els.sideRole.textContent = state.playerName;
+        els.sideRole.textContent = 'You';
         els.guessInput.value = '';
         els.guessInput.disabled = false;
         els.btnResign.disabled = false;
@@ -429,12 +1063,18 @@
             els.playEloLine.classList.add('hide');
         }
 
-        els.p1Label.classList.toggle('you-label', state.playerName === 'Player One');
-        els.p2Label.classList.toggle('you-label', state.playerName === 'Player Two');
-
+        applyBoardLabels();
+        resetDigitTracker();
+        clearMatchChat();
         clearEndBanner();
+        els.digitTracker?.classList.remove('hide');
         showScreen('play');
-        startMyTimer();
+        syncMatchChatVisibility();
+        if (opts.startTimer === false) {
+            stopMyTimer();
+        } else {
+            startMyTimer(opts.turnMsRemaining);
+        }
         els.guessInput.focus();
     }
 
@@ -457,40 +1097,102 @@
         els.guessInput.value = '';
     }
 
-    function singleRound(p1, p2) {
+    /** Color a digit vs the secret that side was guessing toward. */
+    function digitCellHtml(arr, index, targetSecret) {
+        const d = arr?.length ? String(arr[index] ?? '') : '';
+        if (!d) return '<div class="single-num center"></div>';
+        if (!state.highlightGuesses || !targetSecret) {
+            return `<div class="single-num center">${d}</div>`;
+        }
+        const secret = String(targetSecret);
+        let cls = '';
+        if (secret[index] === d) cls = ' digit-exact';
+        else if (secret.includes(d)) cls = ' digit-present';
+        return `<div class="single-num center${cls}">${d}</div>`;
+    }
+
+    function singleRound(left, right, leftTarget, rightTarget) {
         const cell = (arr, i) => (arr.length ? String(arr[i] ?? '') : '');
         return `<div class="singleGuess">
             <div class="player-one-con player-con">
                 <div class="player-one-name-con player-name-con poppins-medium center p1-guess-con guess-con">
-                    <div class="single-num center">${cell(p1, 0)}</div>
-                    <div class="single-num center">${cell(p1, 1)}</div>
-                    <div class="single-num center">${cell(p1, 2)}</div>
-                    <div class="single-num center">${cell(p1, 3)}</div>
+                    ${digitCellHtml(left, 0, leftTarget)}
+                    ${digitCellHtml(left, 1, leftTarget)}
+                    ${digitCellHtml(left, 2, leftTarget)}
+                    ${digitCellHtml(left, 3, leftTarget)}
                 </div>
-                <div class="player-one-n poppins-medium center p1-number n-o">${cell(p1, 4)}</div>
-                <div class="player-one-n poppins-medium center p1-order n-o">${cell(p1, 5)}</div>
+                <div class="player-one-n poppins-medium center p1-number n-o">${cell(left, 4)}</div>
+                <div class="player-one-n poppins-medium center p1-order n-o">${cell(left, 5)}</div>
             </div>
             <div class="player-two-con player-con">
                 <div class="player-one-name-con player-name-con poppins-medium center p2-guess-con guess-con">
-                    <div class="single-num center">${cell(p2, 0)}</div>
-                    <div class="single-num center">${cell(p2, 1)}</div>
-                    <div class="single-num center">${cell(p2, 2)}</div>
-                    <div class="single-num center">${cell(p2, 3)}</div>
+                    ${digitCellHtml(right, 0, rightTarget)}
+                    ${digitCellHtml(right, 1, rightTarget)}
+                    ${digitCellHtml(right, 2, rightTarget)}
+                    ${digitCellHtml(right, 3, rightTarget)}
                 </div>
-                <div class="player-two-n poppins-medium center p2-number n-o">${cell(p2, 4)}</div>
-                <div class="player-two-n poppins-medium center p2-order n-o">${cell(p2, 5)}</div>
+                <div class="player-two-n poppins-medium center p2-number n-o">${cell(right, 4)}</div>
+                <div class="player-two-n poppins-medium center p2-order n-o">${cell(right, 5)}</div>
             </div>
         </div>`;
     }
 
+    function youOnLeft() {
+        return !state.spectating && state.playerName === 'Player Two';
+    }
+
+    function applyBoardLabels(opts = {}) {
+        if (state.spectating) {
+            if (els.p1Label) {
+                els.p1Label.textContent = opts.p1Name || 'Player One';
+                els.p1Label.classList.remove('you-label');
+            }
+            if (els.p2Label) {
+                els.p2Label.textContent = opts.p2Name || 'Player Two';
+                els.p2Label.classList.remove('you-label');
+            }
+            return;
+        }
+        const opp =
+            state.vsAI
+                ? 'AI'
+                : opts.oppName || state.opponentName || 'Opponent';
+        if (els.p1Label) {
+            els.p1Label.textContent = 'You';
+            els.p1Label.classList.add('you-label');
+        }
+        if (els.p2Label) {
+            els.p2Label.textContent = opp;
+            els.p2Label.classList.remove('you-label');
+        }
+    }
+
     function renderResults(playerOneHistory, playerTwoHistory) {
-        const maxRounds = Math.max(playerOneHistory.length, playerTwoHistory.length);
+        state.lastP1History = playerOneHistory || [];
+        state.lastP2History = playerTwoHistory || [];
+        const swap = youOnLeft();
+        const leftHist = swap ? state.lastP2History : state.lastP1History;
+        const rightHist = swap ? state.lastP1History : state.lastP2History;
+        // P1 guesses at P2's secret; P2 guesses at P1's secret
+        const leftTarget = swap ? state.reviewP1Secret : state.reviewP2Secret;
+        const rightTarget = swap ? state.reviewP2Secret : state.reviewP1Secret;
+        const maxRounds = Math.max(leftHist.length, rightHist.length);
         let html = '';
         for (let i = 0; i < maxRounds; i++) {
-            html += singleRound(playerOneHistory[i] || [], playerTwoHistory[i] || []);
+            html += singleRound(
+                leftHist[i] || [],
+                rightHist[i] || [],
+                leftTarget,
+                rightTarget
+            );
         }
         els.historyBoard.innerHTML = html;
         els.historyBoard.scrollTop = els.historyBoard.scrollHeight;
+    }
+
+    function refreshHistoryHighlights() {
+        if (!state.lastP1History.length && !state.lastP2History.length) return;
+        renderResults(state.lastP1History, state.lastP2History);
     }
 
     function leaveRoom() {
@@ -507,27 +1209,29 @@
     function setLoggedInUI(user) {
         state.user = user;
         els.sessionLoading?.classList.add('hide');
+        // Play is always available (guest or logged in)
+        els.playPanel?.classList.remove('hide');
         if (user) {
-            els.authPanel.classList.add('hide');
-            els.playPanel.classList.remove('hide');
+            els.authPanel?.classList.add('hide');
             els.profileChip?.classList.remove('hide');
             els.profileChipMobile?.classList.remove('hide');
             els.btnLogout?.classList.remove('hide');
+            els.btnLogoutMobile?.classList.remove('hide');
             if (els.profileName) els.profileName.textContent = user.display_name;
             if (els.profileNameMobile) els.profileNameMobile.textContent = user.display_name;
             syncProfileElo(user.elo);
         } else {
-            els.authPanel.classList.remove('hide');
-            els.playPanel.classList.add('hide');
+            els.authPanel?.classList.remove('hide');
             els.profileChip?.classList.add('hide');
             els.profileChipMobile?.classList.add('hide');
             els.btnLogout?.classList.add('hide');
+            els.btnLogoutMobile?.classList.add('hide');
         }
     }
 
     function requireAuth() {
         if (state.user) return true;
-        showToast('Log in with Telegram to play', 'error');
+        showToast('Log in with Telegram to view match history', 'info');
         return false;
     }
 
@@ -621,34 +1325,89 @@
     // ——— UI events ———
 
     els.btnCreate.addEventListener('click', () => {
-        if (!requireAuth()) return;
         state.vsAI = false;
-        socket.emit('createRoom');
+        socket.emit('createRoom', { sessionId });
     });
 
     els.btnVsAi.addEventListener('click', () => {
-        if (!requireAuth()) return;
         state.vsAI = true;
-        socket.emit('playVsAI');
+        socket.emit('playVsAI', { sessionId });
     });
 
     els.btnJoin.addEventListener('click', () => {
-        if (!requireAuth()) return;
         state.vsAI = false;
         const code = els.joinCodeInput.value.trim().toUpperCase();
         if (!code) {
             showToast('Enter a room code', 'error');
             return;
         }
-        socket.emit('joinRoom', { code });
+        socket.emit('joinRoom', { code, sessionId });
     });
 
     els.btnHistoryBack?.addEventListener('click', () => showScreen('lobby'));
+    els.btnCupsBack?.addEventListener('click', () => {
+        if (state.cupId) {
+            showToast('Leave the cup first', 'info');
+            return;
+        }
+        showScreen('lobby');
+    });
+    els.btnCupCreate?.addEventListener('click', () => {
+        socket.emit('cupCreate', { sessionId });
+    });
+    els.btnCupJoin?.addEventListener('click', () => {
+        const code = (els.cupJoinInput?.value || '').trim().toUpperCase();
+        if (!code) {
+            showToast('Enter a cup code', 'error');
+            return;
+        }
+        socket.emit('cupJoin', { code, sessionId });
+    });
+    els.cupJoinInput?.addEventListener('input', () => {
+        els.cupJoinInput.value = els.cupJoinInput.value
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '')
+            .slice(0, 6);
+    });
+    els.cupJoinInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') els.btnCupJoin?.click();
+    });
+    els.btnCupCopy?.addEventListener('click', async () => {
+        const code = state.cupId;
+        if (!code) return;
+        try {
+            await navigator.clipboard.writeText(code);
+            showToast('Cup code copied', 'info');
+        } catch {
+            showToast('Could not copy — select the code manually', 'error');
+        }
+    });
+    els.btnCupStart?.addEventListener('click', () => {
+        socket.emit('cupStart', { sessionId });
+    });
+    els.btnCupLeave?.addEventListener('click', () => leaveCup());
+    els.btnSpectateBack?.addEventListener('click', () => exitSpectate());
     els.navPlay?.addEventListener('click', () => goNavPlay());
+    els.navCups?.addEventListener('click', () => goNavCups());
     els.navHistory?.addEventListener('click', () => goNavHistory());
     els.navBrand?.addEventListener('click', (e) => {
         e.preventDefault();
         goNavPlay();
+    });
+    els.btnTheme?.addEventListener('click', () => toggleTheme());
+    els.btnThemeMobile?.addEventListener('click', () => toggleTheme());
+
+    els.digitTracker?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.digit-chip');
+        if (!btn || state.spectating) return;
+        cycleDigitChip(btn);
+    });
+
+    els.matchChatInput?.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        if (e.shiftKey) return;
+        e.preventDefault();
+        sendMatchChat();
     });
 
     async function doLogout() {
@@ -784,6 +1543,119 @@
         showScreen('waiting');
     });
 
+    socket.on('cupCreated', (payload) => {
+        renderCupLobby(payload);
+        showToast('Cup created — share the code', 'info');
+    });
+
+    socket.on('cupJoined', (payload) => {
+        renderCupLobby(payload);
+        showToast('Joined cup', 'info');
+    });
+
+    socket.on('cupLobbyUpdate', (payload) => {
+        if (!payload?.code) return;
+        if (state.cupId && state.cupId !== payload.code) return;
+        renderCupLobby(payload);
+    });
+
+    socket.on('cupStarted', (payload) => {
+        renderCupLobby(payload, { forceScreen: false });
+        showToast('Cup started — check your match!', 'info');
+    });
+
+    socket.on('cupBracketUpdate', (payload) => {
+        if (!payload?.code) return;
+        if (state.cupId && state.cupId !== payload.code) return;
+        renderCupLobby(payload, {
+            forceScreen: state.screen === 'cupLobby' || !state.roomId,
+        });
+    });
+
+    socket.on('cupMatchAssigned', (msg) => {
+        if (!msg?.roomId) return;
+        state.cupId = msg.cupCode || state.cupId;
+        state.cupMatchId = msg.matchId || null;
+        state.cupStatus = 'running';
+        state.roomId = msg.roomId;
+        state.playerName = msg.playerName;
+        state.vsAI = false;
+        state.opponentName = msg.opponentName || null;
+        state.secret = null;
+        state.secretLocked = false;
+        state.gameEnded = false;
+        clearEndBanner();
+        els.historyBoard.innerHTML = '';
+        const label = msg.label || 'Cup match';
+        const vs = msg.opponentName ? ` vs ${msg.opponentName}` : '';
+        goToSecretScreen(`${label}${vs} — set your secret number`);
+        showToast(`${label} — set your secret`, 'info');
+    });
+
+    socket.on('cupWaiting', (msg) => {
+        if (msg?.message) showToast(msg.message, 'info');
+        if (state.screen === 'play' && state.gameEnded) {
+            // stay on end banner until they tap Back to cup
+            return;
+        }
+        if (state.spectating) return;
+        if (!state.roomId || state.gameEnded) {
+            returnToCupHub();
+        }
+    });
+
+    socket.on('cupSpectateStart', (snapshot) => {
+        enterSpectate(snapshot);
+    });
+
+    socket.on('cupMatchUpdate', (msg) => {
+        if (!state.spectating) return;
+        if (!msg?.matchId || msg.matchId !== state.spectateMatchId) return;
+        applyBoardLabels({
+            p1Name: msg.playerOneName || 'Player One',
+            p2Name: msg.playerTwoName || 'Player Two',
+        });
+        if (msg.status === 'done') {
+            state.highlightGuesses = true;
+            if (msg.playerOneSecret) state.reviewP1Secret = msg.playerOneSecret;
+            if (msg.playerTwoSecret) state.reviewP2Secret = msg.playerTwoSecret;
+        }
+        renderResults(msg.playerOneHistory || [], msg.playerTwoHistory || []);
+        if (els.playEloLine) {
+            if (msg.status === 'done') {
+                els.playEloLine.textContent = msg.winnerName
+                    ? `Final · ${msg.winnerName} won`
+                    : 'Match finished';
+            } else {
+                els.playEloLine.textContent = 'Live view · read only';
+            }
+            els.playEloLine.classList.remove('hide');
+        }
+        if (msg.status === 'done') {
+            els.playStatus.textContent = `Ended · ${msg.label || 'Match'}`;
+        }
+    });
+
+    socket.on('cupFinished', (payload) => {
+        renderCupLobby(payload, { forceScreen: !state.roomId || state.gameEnded });
+        const name = payload?.championName || 'Champion';
+        showToast(`${name} wins the cup!`, 'info');
+        if (els.btnCupLeave) {
+            els.btnCupLeave.classList.remove('hide');
+            els.btnCupLeave.textContent = 'Exit cup';
+        }
+    });
+
+    socket.on('cupLeft', () => {
+        if (state.intentionalCupLeave) {
+            state.intentionalCupLeave = false;
+            return;
+        }
+        clearCupState();
+        showScreen('cups');
+        showToast('You left the cup', 'info');
+    });
+
     socket.on('authed', (msg) => {
         setLoggedInUI({
             id: msg.id,
@@ -862,18 +1734,19 @@
             showToast('Set your secret first', 'error');
             return;
         }
-        enterPlay();
+        enterPlay({ turnMsRemaining: msg.turnMsRemaining });
     });
 
     socket.on('historyUpdate', (msg) => {
+        if (state.spectating) return;
         if (msg.roomId !== state.roomId || state.gameEnded) return;
-        state.canAddGuess = msg.historiesAreEqual;
+        state.canAddGuess =
+            msg.canAddGuess != null ? !!msg.canAddGuess : !!msg.historiesAreEqual;
         renderResults(msg.playerOneHistory, msg.playerTwoHistory);
 
         if (state.canAddGuess) {
             els.playStatus.textContent = 'Your turn';
-            stopMyTimer();
-            startMyTimer();
+            startMyTimer(msg.turnMsRemaining);
             els.guessInput.focus();
         } else {
             els.playStatus.textContent = 'Waiting for opponent…';
@@ -886,10 +1759,30 @@
         if (state.gameEnded) return;
         stopAllTimers();
         if (msg.vsAI != null) state.vsAI = !!msg.vsAI;
+        if (msg.playerOneHistory || msg.playerTwoHistory) {
+            state.lastP1History = msg.playerOneHistory || state.lastP1History;
+            state.lastP2History = msg.playerTwoHistory || state.lastP2History;
+        }
+        state.reviewP1Secret = msg.playerOneSecret || state.reviewP1Secret;
+        state.reviewP2Secret = msg.playerTwoSecret || state.reviewP2Secret;
+        if (msg.cupId) {
+            state.cupId = msg.cupId;
+            state.cupMatchId = msg.cupMatchId || state.cupMatchId;
+            state.cupStatus = 'running';
+            // Match room is deleted server-side; persist cup only for reconnect
+            const keptRoom = state.roomId;
+            state.roomId = null;
+            persistPlayState();
+            state.roomId = keptRoom;
+        } else {
+            clearPlayState();
+        }
         const winnerName = msg.winner === 'playerTwo' ? 'Player Two' : 'Player One';
         const didWin = winnerName === state.playerName;
         let eloLine = state.vsAI ? 'vs AI · rating unchanged' : '';
-        if (msg.elo && state.playerName === 'Player One' && msg.elo.playerOneDelta != null) {
+        if (msg.cupId || msg.elo?.cup) {
+            eloLine = didWin ? 'Advanced in cup · Elo unchanged' : 'Out of cup · Elo unchanged';
+        } else if (msg.elo && state.playerName === 'Player One' && msg.elo.playerOneDelta != null) {
             const d = msg.elo.playerOneDelta;
             if (d !== 0) {
                 eloLine = `Elo ${d > 0 ? '+' : ''}${d} → ${msg.elo.playerOneElo}`;
@@ -911,7 +1804,13 @@
             }
         }
         state.pendingWinMessage = {
-            text: didWin ? 'Victory!' : 'Defeat — try again',
+            text: msg.cupId
+                ? didWin
+                    ? 'You advanced!'
+                    : 'Cup run over'
+                : didWin
+                  ? 'Victory!'
+                  : 'Defeat — try again',
             type: 'info',
         };
         showGameEndBanner(didWin ? 'You win' : 'You lose', didWin, eloLine);
@@ -960,6 +1859,36 @@
     socket.on('usercount', (count) => {
         syncUserCount(count);
     });
+
+    socket.on('chatMessage', (msg) => {
+        if (!msg || msg.roomId !== state.roomId) return;
+        if (state.vsAI || state.spectating) return;
+        const isMe = msg.sessionId && msg.sessionId === sessionId;
+        appendChatMessage({
+            from: isMe ? 'You' : msg.from || 'Opponent',
+            text: msg.text,
+            isMe,
+            playSound: !isMe,
+        });
+    });
+
+    socket.on('sessionRestored', (msg) => {
+        applySessionRestored(msg);
+    });
+
+    function emitSessionHello() {
+        socket.emit('sessionHello', {
+            sessionId,
+            playState: readPlayState(),
+        });
+    }
+
+    socket.on('connect', () => {
+        emitSessionHello();
+    });
+
+    // In case connect already fired before listener
+    if (socket.connected) emitSessionHello();
 
     loadConfigAndMe();
 })();
