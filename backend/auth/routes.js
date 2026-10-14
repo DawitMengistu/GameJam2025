@@ -17,6 +17,10 @@ import {
 } from '../db/friends.js';
 import { isUserOnline } from '../presence.js';
 import {
+    notifyFriendRequestReceived,
+    notifyFriendRequestResolved,
+} from '../friendNotify.js';
+import {
     upsertTelegramUser,
     createMagicLink,
     consumeMagicLink,
@@ -220,6 +224,16 @@ router.post('/friends/request', dbRequired, requireUser, async (req, res) => {
         if (!userId) return res.status(400).json({ error: 'userId required' });
         const result = await createFriendRequest(req.user.id, userId);
         if (!result.ok) return res.status(400).json({ error: result.reason });
+
+        notifyFriendRequestReceived(userId, {
+            friendshipId: result.friendship.id,
+            from: {
+                id: req.user.id,
+                display_name: req.user.display_name,
+                username: req.user.username || null,
+            },
+        });
+
         return res.json({ ok: true, friendship: result.friendship });
     } catch (err) {
         console.error('[api] friends request:', err);
@@ -240,6 +254,27 @@ router.post('/friends/respond', dbRequired, requireUser, async (req, res) => {
             accept
         );
         if (!result.ok) return res.status(400).json({ error: result.reason });
+
+        const f = result.friendship;
+        const otherId =
+            f.requester_id === req.user.id ? f.addressee_id : f.requester_id;
+        const status = accept ? 'accepted' : 'declined';
+        const meFriend = {
+            id: req.user.id,
+            display_name: req.user.display_name,
+            username: req.user.username || null,
+            elo: req.user.elo,
+        };
+        notifyFriendRequestResolved(
+            accept ? [otherId, req.user.id] : [otherId],
+            {
+                friendshipId: f.id,
+                status,
+                friendId: accept ? req.user.id : otherId,
+                friend: accept ? meFriend : null,
+            }
+        );
+
         return res.json({ ok: true, friendship: result.friendship });
     } catch (err) {
         console.error('[api] friends respond:', err);
@@ -252,6 +287,17 @@ router.delete('/friends/:id', dbRequired, requireUser, async (req, res) => {
         const id = String(req.params.id || '').trim();
         const result = await deleteFriendship(req.user.id, id);
         if (!result.ok) return res.status(404).json({ error: result.reason });
+
+        const f = result.friendship;
+        const otherId =
+            f.requester_id === req.user.id ? f.addressee_id : f.requester_id;
+        notifyFriendRequestResolved(otherId, {
+            friendshipId: f.id,
+            status: 'removed',
+            friendId: req.user.id,
+            friend: null,
+        });
+
         return res.json({ ok: true });
     } catch (err) {
         console.error('[api] friends delete:', err);

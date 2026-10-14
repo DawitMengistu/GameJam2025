@@ -40,6 +40,7 @@ import {
     markUserOnline,
     setPresenceChangeHandler,
 } from './presence.js';
+import { setFriendNotifyIo } from './friendNotify.js';
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -57,6 +58,7 @@ app.use(express.static(join(__dirname, './frontend')));
 
 const server = createServer(app);
 const io = new Server(server);
+setFriendNotifyIo(io);
 
 /** @type {Record<string, any>} */
 const rooms = {};
@@ -778,12 +780,16 @@ function buildRoomResumePayload(code, room, sessionId) {
     const key = seatKeyInRoom(room, sessionId);
     if (!key) return null;
     const seat = room[key];
+    const oppKey = key === 'playerOne' ? 'playerTwo' : 'playerOne';
     const canAddGuess =
         room.status === 'playing' && isSeatTurn(room, key);
     return {
         roomId: code,
         playerName: displayName(key),
         vsAI: !!room.vsAI,
+        opponentName: room.vsAI
+            ? 'AI'
+            : room[oppKey]?.displayName || null,
         cupId: room.cupId || null,
         cupMatchId: room.cupMatchId || null,
         status: room.status,
@@ -810,8 +816,16 @@ function createPvpRematchRoom(socketA, socketB) {
     };
     clearRematchState(socketA);
     clearRematchState(socketB);
-    socketA.emit('rematchStarted', { roomId: code, playerName: 'Player One' });
-    socketB.emit('rematchStarted', { roomId: code, playerName: 'Player Two' });
+    socketA.emit('rematchStarted', {
+        roomId: code,
+        playerName: 'Player One',
+        opponentName: rooms[code].playerTwo?.displayName || 'Opponent',
+    });
+    socketB.emit('rematchStarted', {
+        roomId: code,
+        playerName: 'Player Two',
+        opponentName: rooms[code].playerOne?.displayName || 'Opponent',
+    });
 }
 
 async function finishGame(code, winnerKey) {
@@ -1286,14 +1300,15 @@ io.on('connection', (socket) => {
         room.playerTwo = seatFromSocket(socket);
         room.status = 'ready';
 
-        socket.emit('roomJoined', {
-            roomId: code,
-            playerName: 'Player Two',
-        });
-
         emitToPlayer(room.playerOne, 'opponentJoined', {
             roomId: code,
             message: 'Player Two joined — set your secret number',
+            opponentName: room.playerTwo.displayName || 'Opponent',
+        });
+        socket.emit('roomJoined', {
+            roomId: code,
+            playerName: 'Player Two',
+            opponentName: room.playerOne?.displayName || 'Opponent',
         });
         socket.emit('statusMessage', {
             message: 'Joined room — set your secret number',
@@ -2010,10 +2025,12 @@ io.on('connection', (socket) => {
         socket.emit('roomJoined', {
             roomId,
             playerName: 'Player Two',
+            opponentName: room.playerOne?.displayName || 'Opponent',
         });
         emitToPlayer(room.playerOne, 'opponentJoined', {
             roomId,
             message: 'Friend joined — set your secret number',
+            opponentName: room.playerTwo.displayName || 'Opponent',
         });
         socket.emit('statusMessage', {
             message: 'Joined — set your secret number',

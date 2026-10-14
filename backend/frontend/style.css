@@ -111,6 +111,30 @@ html.dark body {
     cursor: pointer;
 }
 
+.nav-badge {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--red-main);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.15rem;
+    text-align: center;
+    pointer-events: none;
+}
+
+@media (min-width: 768px) {
+    .nav-badge {
+        top: 8px;
+        right: 10px;
+    }
+}
+
 .nav-link:hover {
     color: var(--balck-border);
     background: var(--nav-hover);
@@ -777,11 +801,59 @@ html.dark .history-row {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    align-items: center;
+    align-items: stretch;
     gap: 6px;
     width: auto;
     padding: 4px 0;
     align-self: center;
+}
+
+.digit-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+}
+
+.digit-pos-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.digit-pos {
+    width: 10px;
+    height: 8px;
+    padding: 0;
+    border-radius: 2px;
+    border: 1px solid rgba(59, 59, 59, 0.28);
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+
+.digit-pos:hover {
+    border-color: var(--green-main);
+}
+
+.digit-pos.is-on {
+    background: var(--green-main);
+    border-color: var(--green-main);
+}
+
+html.dark .digit-pos {
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+html.dark .digit-pos:hover {
+    border-color: var(--green-main);
+}
+
+html.dark .digit-pos.is-on {
+    background: var(--green-main);
+    border-color: var(--green-main);
 }
 
 .digit-chip {
@@ -1444,8 +1516,23 @@ html.dark .answer-input::placeholder {
         flex-direction: row;
         flex-wrap: wrap;
         justify-content: center;
+        align-items: center;
         gap: 8px;
         width: 100%;
+    }
+
+    .digit-row {
+        gap: 4px;
+    }
+
+    .digit-pos-slots {
+        flex-direction: row;
+        gap: 2px;
+    }
+
+    .digit-pos {
+        width: 8px;
+        height: 10px;
     }
 
     .digit-chip {

@@ -57,6 +57,13 @@ export function getSocketIdForUser(userId) {
     return [...set][set.size - 1];
 }
 
+/** All connected socket ids for a logged-in user (multi-tab). */
+export function getSocketIdsForUser(userId) {
+    const set = onlineByUser.get(userId);
+    if (!set || set.size === 0) return [];
+    return [...set];
+}
+
 export function getSocketIdForSession(sessionId) {
     return sessionId ? socketBySession.get(sessionId) || null : null;
 }

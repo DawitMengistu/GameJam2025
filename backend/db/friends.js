@@ -173,10 +173,10 @@ export async function deleteFriendship(userId, friendshipId) {
         DELETE FROM friendships
         WHERE id = ${friendshipId}
           AND (requester_id = ${userId} OR addressee_id = ${userId})
-        RETURNING id
+        RETURNING *
     `;
     if (!rows[0]) return { ok: false, reason: 'Not found' };
-    return { ok: true };
+    return { ok: true, friendship: rows[0] };
 }
 
 export async function areFriends(userA, userB) {

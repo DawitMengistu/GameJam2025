@@ -22,6 +22,12 @@
 
     const sessionId = getOrCreateSessionId();
 
+    const queryClient =
+        typeof createQueryClient === 'function'
+            ? createQueryClient({ defaultStaleTime: 60_000 })
+            : null;
+    const FRIENDS_QUERY_KEY = 'friends';
+
     function persistPlayState() {
         try {
             const payload = {
@@ -94,6 +100,7 @@
         navPlay: document.getElementById('nav-play'),
         navCups: document.getElementById('nav-cups'),
         navFriends: document.getElementById('nav-friends'),
+        friendsBadge: document.getElementById('friends-badge'),
         navHistory: document.getElementById('nav-history'),
         btnHistoryBack: document.getElementById('btn-history-back'),
         historyListPanel: document.getElementById('history-list-panel'),
@@ -215,6 +222,10 @@
     const DIGIT_STATES = ['default', 'in', 'out'];
     const digitNotes = Object.fromEntries(
         Array.from({ length: 9 }, (_, i) => [String(i + 1), 'default'])
+    );
+    /** Known position index 0–3 per digit, or null if unset */
+    const digitPositions = Object.fromEntries(
+        Array.from({ length: 9 }, (_, i) => [String(i + 1), null])
     );
 
     function validateNumber(input) {
@@ -855,16 +866,79 @@
         state.rematchFromSocketId = null;
     }
 
+    function buildDigitTracker() {
+        if (!els.digitTracker) return;
+        els.digitTracker.innerHTML = '';
+        for (let i = 1; i <= 9; i++) {
+            const digit = String(i);
+            const row = document.createElement('div');
+            row.className = 'digit-row';
+            row.dataset.digit = digit;
+
+            const slots = document.createElement('div');
+            slots.className = 'digit-pos-slots';
+            slots.setAttribute('role', 'group');
+            slots.setAttribute('aria-label', `Position for ${digit}`);
+            for (let p = 0; p < 4; p++) {
+                const slot = document.createElement('button');
+                slot.type = 'button';
+                slot.className = 'digit-pos';
+                slot.dataset.digit = digit;
+                slot.dataset.pos = String(p);
+                slot.setAttribute('aria-label', `Mark ${digit} in position ${p + 1}`);
+                slot.setAttribute('aria-pressed', 'false');
+                slots.appendChild(slot);
+            }
+
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'digit-chip';
+            chip.dataset.digit = digit;
+            chip.textContent = digit;
+
+            row.appendChild(slots);
+            row.appendChild(chip);
+            els.digitTracker.appendChild(row);
+        }
+    }
+
+    function syncDigitPosSlots(digit) {
+        const pos = digitPositions[digit];
+        els.digitTracker
+            ?.querySelectorAll(`.digit-pos[data-digit="${digit}"]`)
+            .forEach((slot) => {
+                const on = pos != null && Number(slot.dataset.pos) === pos;
+                slot.classList.toggle('is-on', on);
+                slot.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+    }
+
+    function toggleDigitPosition(digit, pos) {
+        if (!digit || digitPositions[digit] === undefined) return;
+        const next = digitPositions[digit] === pos ? null : pos;
+        digitPositions[digit] = next;
+        syncDigitPosSlots(digit);
+    }
+
     function resetDigitTracker() {
         for (const d of Object.keys(digitNotes)) digitNotes[d] = 'default';
-        els.digitTracker?.querySelectorAll('.digit-chip').forEach((btn) => {
+        for (const d of Object.keys(digitPositions)) digitPositions[d] = null;
+        if (!els.digitTracker?.querySelector('.digit-row')) {
+            buildDigitTracker();
+            return;
+        }
+        els.digitTracker.querySelectorAll('.digit-chip').forEach((btn) => {
             btn.classList.remove('state-in', 'state-out');
+        });
+        els.digitTracker.querySelectorAll('.digit-pos').forEach((slot) => {
+            slot.classList.remove('is-on');
+            slot.setAttribute('aria-pressed', 'false');
         });
     }
 
     function cycleDigitChip(btn) {
         const digit = btn?.dataset?.digit;
-        if (!digit || !digitNotes[digit]) return;
+        if (!digit || digitNotes[digit] === undefined) return;
         const idx = DIGIT_STATES.indexOf(digitNotes[digit]);
         const next = DIGIT_STATES[(idx + 1) % DIGIT_STATES.length];
         digitNotes[digit] = next;
@@ -1105,6 +1179,7 @@
         state.reviewP1Secret = null;
         state.reviewP2Secret = null;
         state.vsAI = false;
+        state.opponentName = null;
         state.cupMatchId = null;
         els.historyBoard.innerHTML = '';
         els.mySecretDisplay.textContent = '____';
@@ -1130,6 +1205,9 @@
         state.roomId = room.roomId;
         state.playerName = room.playerName;
         state.vsAI = !!room.vsAI;
+        state.opponentName = room.vsAI
+            ? 'AI'
+            : room.opponentName || state.opponentName;
         state.cupId = room.cupId || state.cupId;
         state.cupMatchId = room.cupMatchId || state.cupMatchId;
         state.gameEnded = false;
@@ -1382,12 +1460,15 @@
             if (els.profileName) els.profileName.textContent = user.display_name;
             if (els.profileNameMobile) els.profileNameMobile.textContent = user.display_name;
             syncProfileElo(user.elo);
+            warmFriendsCache();
         } else {
             els.authPanel?.classList.remove('hide');
             els.profileChip?.classList.add('hide');
             els.profileChipMobile?.classList.add('hide');
             els.btnLogout?.classList.add('hide');
             els.btnLogoutMobile?.classList.add('hide');
+            queryClient?.clear();
+            updateFriendsBadge(0);
         }
     }
 
@@ -1409,35 +1490,121 @@
         return friend.display_name || 'Player';
     }
 
+    function emptyFriendsData() {
+        return { accepted: [], pendingIn: [], pendingOut: [] };
+    }
+
+    function getFriendsData() {
+        return queryClient?.getQueryData(FRIENDS_QUERY_KEY) || emptyFriendsData();
+    }
+
+    function updateFriendsBadge(countOverride) {
+        const badge = els.friendsBadge;
+        if (!badge) return;
+        const data = getFriendsData();
+        const count =
+            typeof countOverride === 'number'
+                ? countOverride
+                : (data.pendingIn || []).length;
+        if (count > 0) {
+            badge.textContent = count > 99 ? '99+' : String(count);
+            badge.classList.remove('hide');
+        } else {
+            badge.textContent = '0';
+            badge.classList.add('hide');
+        }
+    }
+
+    async function fetchFriendsPayload() {
+        const res = await fetch('/api/friends', { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to load friends');
+        }
+        return {
+            accepted: data.accepted || [],
+            pendingIn: data.pendingIn || [],
+            pendingOut: data.pendingOut || [],
+        };
+    }
+
+    async function ensureFriendsLoaded({ force = false } = {}) {
+        if (!queryClient || !state.user) return emptyFriendsData();
+        const data = await queryClient.fetchQuery(
+            FRIENDS_QUERY_KEY,
+            fetchFriendsPayload,
+            { force }
+        );
+        updateFriendsBadge();
+        return data;
+    }
+
+    function warmFriendsCache() {
+        if (!state.user || !queryClient) return;
+        void ensureFriendsLoaded().catch(() => {
+            /* ignore warm errors */
+        });
+    }
+
+    function renderFriendsFromCache() {
+        const data = getFriendsData();
+        renderFriendsPending(data);
+        renderFriendsAccepted(data.accepted || []);
+        updateFriendsBadge();
+    }
+
     async function openFriends() {
         if (!requireAuth('Log in with Telegram to use Friends')) return;
         showScreen('friends');
-        await refreshFriendsLists();
-    }
-
-    async function refreshFriendsLists() {
-        if (!els.friendsAccepted || !els.friendsPending) return;
-        els.friendsPending.innerHTML =
-            '<p class="friends-empty">Loading…</p>';
-        els.friendsAccepted.innerHTML =
-            '<p class="friends-empty">Loading…</p>';
+        const cached = queryClient?.getQueryData(FRIENDS_QUERY_KEY);
+        if (cached) {
+            renderFriendsFromCache();
+        } else if (els.friendsPending) {
+            els.friendsPending.innerHTML =
+                '<p class="friends-empty">Loading…</p>';
+            els.friendsAccepted.innerHTML =
+                '<p class="friends-empty">Loading…</p>';
+        }
         try {
-            const res = await fetch('/api/friends', { credentials: 'include' });
-            const data = await res.json();
-            if (!res.ok) {
+            await ensureFriendsLoaded();
+            renderFriendsFromCache();
+        } catch (err) {
+            if (!cached) {
                 els.friendsPending.innerHTML = `<p class="friends-empty">${
-                    data.error || 'Failed'
+                    err.message || 'Network error'
                 }</p>`;
                 els.friendsAccepted.innerHTML = '';
-                return;
             }
-            renderFriendsPending(data);
-            renderFriendsAccepted(data.accepted || []);
-        } catch {
-            els.friendsPending.innerHTML =
-                '<p class="friends-empty">Network error</p>';
-            els.friendsAccepted.innerHTML = '';
         }
+    }
+
+    async function refreshFriendsLists({ force = true } = {}) {
+        try {
+            await ensureFriendsLoaded({ force });
+            if (state.screen === 'friends') renderFriendsFromCache();
+            else updateFriendsBadge();
+        } catch (err) {
+            if (state.screen === 'friends') {
+                els.friendsPending.innerHTML = `<p class="friends-empty">${
+                    err.message || 'Network error'
+                }</p>`;
+                els.friendsAccepted.innerHTML = '';
+            }
+        }
+    }
+
+    function patchFriendsCache(updater) {
+        if (!queryClient) return;
+        queryClient.setQueryData(FRIENDS_QUERY_KEY, (prev) => {
+            const base = prev || emptyFriendsData();
+            return updater({
+                accepted: [...(base.accepted || [])],
+                pendingIn: [...(base.pendingIn || [])],
+                pendingOut: [...(base.pendingOut || [])],
+            });
+        });
+        if (state.screen === 'friends') renderFriendsFromCache();
+        else updateFriendsBadge();
     }
 
     function renderFriendsPending(data) {
@@ -1975,10 +2142,17 @@
     els.btnThemeMobile?.addEventListener('click', () => toggleTheme());
 
     els.digitTracker?.addEventListener('click', (e) => {
-        const btn = e.target.closest('.digit-chip');
-        if (!btn || state.spectating) return;
-        cycleDigitChip(btn);
+        if (state.spectating) return;
+        const posBtn = e.target.closest('.digit-pos');
+        if (posBtn && els.digitTracker.contains(posBtn)) {
+            toggleDigitPosition(posBtn.dataset.digit, Number(posBtn.dataset.pos));
+            return;
+        }
+        const chip = e.target.closest('.digit-chip');
+        if (chip && els.digitTracker.contains(chip)) cycleDigitChip(chip);
     });
+
+    buildDigitTracker();
 
     els.matchChatInput?.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
@@ -1993,6 +2167,7 @@
         } catch {
             /* ignore */
         }
+        queryClient?.clear();
         setLoggedInUI(null);
         showToast('Logged out', 'info');
         location.reload();
@@ -2243,6 +2418,7 @@
         state.roomId = msg.roomId;
         state.playerName = msg.playerName;
         state.vsAI = true;
+        state.opponentName = 'AI';
         state.gameEnded = false;
         const eng = msg.engine === 'neural' ? 'trained model' : 'heuristic AI';
         const eloBit = msg.aiElo != null ? ` · ${msg.aiElo} Elo` : '';
@@ -2250,15 +2426,19 @@
     });
 
     socket.on('opponentJoined', (msg) => {
+        if (msg?.opponentName) state.opponentName = msg.opponentName;
+        const name = state.opponentName || 'Opponent';
         if (msg?.message) showToast(msg.message, 'info');
-        goToSecretScreen('Opponent joined — set your secret number');
+        goToSecretScreen(`${name} joined — set your secret number`);
     });
 
     socket.on('roomJoined', (msg) => {
         state.roomId = msg.roomId;
         state.playerName = msg.playerName;
         state.vsAI = false;
-        goToSecretScreen('Joined — set your secret number');
+        if (msg?.opponentName) state.opponentName = msg.opponentName;
+        const vs = state.opponentName ? ` vs ${state.opponentName}` : '';
+        goToSecretScreen(`Joined${vs} — set your secret number`);
     });
 
     socket.on('rematchStarted', (msg) => {
@@ -2267,6 +2447,7 @@
         state.roomId = msg.roomId;
         state.playerName = msg.playerName;
         state.vsAI = false;
+        if (msg?.opponentName) state.opponentName = msg.opponentName;
         state.secret = null;
         state.secretLocked = false;
         state.gameEnded = false;
@@ -2432,16 +2613,103 @@
     });
 
     socket.on('friendsPresence', (msg) => {
-        if (!msg?.userId || state.screen !== 'friends') return;
+        if (!msg?.userId) return;
+        const online = Boolean(msg.online);
+        patchFriendsCache((data) => {
+            for (const list of [data.accepted, data.pendingIn, data.pendingOut]) {
+                for (const item of list) {
+                    if (item.friend?.id === msg.userId) item.online = online;
+                }
+            }
+            return data;
+        });
+        if (state.screen !== 'friends') return;
         const row = els.friendsAccepted?.querySelector(
             `[data-friend-user-id="${msg.userId}"]`
         );
         if (!row) return;
         const chip = row.querySelector('.friends-presence');
         if (!chip) return;
-        chip.classList.toggle('is-online', Boolean(msg.online));
-        chip.classList.toggle('is-offline', !msg.online);
-        chip.textContent = msg.online ? 'Online' : 'Offline';
+        chip.classList.toggle('is-online', online);
+        chip.classList.toggle('is-offline', !online);
+        chip.textContent = online ? 'Online' : 'Offline';
+    });
+
+    socket.on('friendRequestReceived', (msg) => {
+        if (!msg?.friendshipId || !msg.from?.id) return;
+        const already = getFriendsData().pendingIn.some(
+            (p) => p.id === msg.friendshipId
+        );
+        if (!already) {
+            patchFriendsCache((data) => {
+                data.pendingIn.unshift({
+                    id: msg.friendshipId,
+                    status: 'pending',
+                    direction: 'in',
+                    friend: {
+                        id: msg.from.id,
+                        display_name: msg.from.display_name,
+                        username: msg.from.username || null,
+                    },
+                    online: true,
+                });
+                return data;
+            });
+        } else {
+            updateFriendsBadge();
+        }
+        if (state.screen !== 'friends') {
+            showToast(
+                `${friendDisplayName(msg.from)} sent a friend request`,
+                'info'
+            );
+        }
+    });
+
+    socket.on('friendRequestResolved', (msg) => {
+        if (!msg?.friendshipId) return;
+        const status = msg.status;
+        patchFriendsCache((data) => {
+            const pull = (list) =>
+                list.filter((item) => item.id !== msg.friendshipId);
+
+            if (status === 'accepted') {
+                data.pendingIn = pull(data.pendingIn);
+                data.pendingOut = pull(data.pendingOut);
+                const friend =
+                    msg.friend ||
+                    (msg.friendId
+                        ? { id: msg.friendId, display_name: 'Friend' }
+                        : null);
+                // Skip if payload points at self (accepter also gets this event).
+                if (
+                    friend?.id &&
+                    friend.id !== state.user?.id &&
+                    !data.accepted.some((a) => a.friend?.id === friend.id)
+                ) {
+                    data.accepted.unshift({
+                        id: msg.friendshipId,
+                        status: 'accepted',
+                        direction: 'out',
+                        friend,
+                        online: true,
+                    });
+                }
+                return data;
+            }
+
+            // declined / removed / cancelled
+            data.pendingIn = pull(data.pendingIn);
+            data.pendingOut = pull(data.pendingOut);
+            if (status === 'removed' && msg.friendId) {
+                data.accepted = data.accepted.filter(
+                    (a) => a.friend?.id !== msg.friendId && a.id !== msg.friendshipId
+                );
+            } else {
+                data.accepted = pull(data.accepted);
+            }
+            return data;
+        });
     });
 
     socket.on('friendPlayInvite', (msg) => {
