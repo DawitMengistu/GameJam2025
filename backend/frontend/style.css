@@ -16,6 +16,10 @@
     --nav-hover: #f3f4f1;
     --board-row: #ecefe8;
     --history-row-bg: #f4f6f1;
+    --scrollbar-size: 8px;
+    --scrollbar-track: rgba(59, 59, 59, 0.06);
+    --scrollbar-thumb: rgba(108, 154, 76, 0.45);
+    --scrollbar-thumb-hover: rgba(108, 154, 76, 0.7);
 }
 
 html.dark {
@@ -29,12 +33,47 @@ html.dark {
     --nav-hover: #232933;
     --board-row: #232933;
     --history-row-bg: #232933;
+    --scrollbar-track: rgba(255, 255, 255, 0.04);
+    --scrollbar-thumb: rgba(108, 154, 76, 0.4);
+    --scrollbar-thumb-hover: rgba(108, 154, 76, 0.65);
 }
 
 *,
 *::before,
 *::after {
     box-sizing: border-box;
+}
+
+/* Custom scrollbars (Firefox + Chromium/WebKit) */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 body {
@@ -121,7 +160,9 @@ html.dark .theme-icon-moon {
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
+    max-height: min(280px, 36vh);
+    overflow-y: auto;
 }
 
 .cup-player-row {
@@ -167,30 +208,44 @@ html.dark .cup-player-row {
 }
 
 .cup-bracket-graph {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    grid-template-areas:
-        "sf1 connector final"
-        "sf2 connector final";
-    gap: 12px 16px;
+    display: flex;
+    flex-direction: row;
     align-items: stretch;
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
 }
 
 .cup-bracket-graph.hide {
     display: none;
 }
 
-.cup-bracket-sf1 { grid-area: sf1; }
-.cup-bracket-sf2 { grid-area: sf2; }
-.cup-bracket-final { grid-area: final; align-self: center; }
-.cup-bracket-connector {
-    grid-area: connector;
+.cup-bracket-round {
+    flex: 0 0 auto;
+    min-width: min(200px, 70vw);
+    max-width: 240px;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.cup-bracket-round-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
     color: var(--muted);
-    font-size: 1.25rem;
-    opacity: 0.7;
+    text-align: left;
+    padding: 0 2px;
+}
+
+.cup-bracket-round-matches {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    justify-content: space-evenly;
 }
 
 .cup-match-row {
@@ -216,6 +271,12 @@ html.dark .cup-match-row {
     opacity: 0.92;
 }
 
+.cup-match-row.is-champion {
+    border-color: var(--green-main);
+    box-shadow: 0 0 0 1px rgba(108, 154, 76, 0.35);
+    opacity: 1;
+}
+
 .cup-match-label {
     font-weight: 600;
     font-size: 0.75rem;
@@ -234,6 +295,29 @@ html.dark .cup-match-row {
     margin-top: 6px;
     font-size: 0.75rem;
     color: var(--blue-main);
+}
+
+.cup-match-status.is-winner {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--green-main);
+    font-weight: 600;
+}
+
+.cup-match-status.is-winner.is-champion .cup-winner-name {
+    font-weight: 700;
+}
+
+.cup-crown {
+    display: inline-flex;
+    flex-shrink: 0;
+    color: var(--green-main);
+    line-height: 0;
+}
+
+.cup-crown-icon {
+    display: block;
 }
 
 .cup-watch-btn {
@@ -268,18 +352,8 @@ html.dark .cup-match-row {
 }
 
 @media (max-width: 700px) {
-    .cup-bracket-graph {
-        grid-template-columns: 1fr;
-        grid-template-areas:
-            "sf1"
-            "sf2"
-            "connector"
-            "final";
-    }
-
-    .cup-bracket-connector {
-        transform: rotate(90deg);
-        padding: 4px 0;
+    .cup-bracket-round {
+        min-width: min(180px, 78vw);
     }
 }
 
@@ -565,6 +639,26 @@ html.dark .history-row {
     grid-template-columns: auto auto minmax(0, 1fr) auto minmax(260px, 320px);
     gap: 12px;
     align-items: stretch;
+}
+
+/* Spectate: drop digit + timer rails so game-con is not crushed into an auto column */
+.play-shell.spectating {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+}
+
+.play-shell.spectating .digit-tracker,
+.play-shell.spectating .player-time-con,
+.play-shell.spectating .answer-con {
+    display: none !important;
+}
+
+.play-shell.spectating .game-con {
+    grid-column: 1;
+    min-width: 0;
+}
+
+.play-shell.spectating .side-bar {
+    grid-column: 2;
 }
 
 .digit-tracker {
@@ -937,7 +1031,6 @@ html.dark .match-chat-msg.is-me .match-chat-bubble {
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
 }
 
 .singleGuess {
@@ -1160,6 +1253,27 @@ html.dark .answer-input::placeholder {
         overflow: hidden;
     }
 
+    .play-shell.spectating {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr) auto;
+    }
+
+    .play-shell.spectating .game-con {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .play-shell.spectating .side-bar {
+        grid-column: 1;
+        grid-row: 2;
+        max-height: 22vh;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px 16px;
+    }
+
     .game-con {
         grid-row: 1;
     }
@@ -1208,6 +1322,10 @@ html.dark .answer-input::placeholder {
     .play-shell {
         grid-template-columns: 1fr;
         gap: 10px;
+    }
+
+    .play-shell.spectating {
+        grid-template-columns: 1fr;
     }
 
     .digit-tracker {

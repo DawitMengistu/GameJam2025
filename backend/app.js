@@ -11,6 +11,25 @@ import apiRouter from './auth/routes.js';
 import { isDbConfigured } from './db/pool.js';
 import { userFromSocket } from './auth/socketUser.js';
 import { recordFinishedGame, AI_DEFAULT_ELO } from './db/games.js';
+import {
+    addCupPlayerRow,
+    createCupRow,
+    deleteCupRow,
+    findOpenCupForIdentity,
+    hydrateCup,
+    loadCupBundleByCode,
+    persistCupTree,
+    removeCupPlayerRow,
+    updateCupAdmin,
+    updateCupStatus,
+} from './db/cups.js';
+import {
+    CUP_MAX,
+    CUP_MIN_START,
+    buildCupBracket as buildBracketTree,
+    placeWinner,
+    readyMatchIds,
+} from './cupBracket.js';
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -33,7 +52,6 @@ const io = new Server(server);
 const rooms = {};
 /** @type {Record<string, any>} */
 const cups = {};
-const CUP_SIZE = 4;
 const OFFLINE_MISS_LIMIT = 2;
 /** Server-authoritative turn length (client bar must follow remaining time). */
 const TURN_MS = 60_000;
@@ -215,6 +233,79 @@ function findCupBySessionId(sessionId) {
     return null;
 }
 
+/** Cup membership that blocks starting another room/cup (finished cups do not block). */
+function findBlockingCupBySocketId(socketId) {
+    const found = findCupBySocketId(socketId);
+    if (!found || found.cup.status === 'finished') return null;
+    return found;
+}
+
+function findBlockingCupBySessionId(sessionId) {
+    const found = findCupBySessionId(sessionId);
+    if (!found || found.cup.status === 'finished') return null;
+    return found;
+}
+
+function putCupInMemory(cup) {
+    if (!cup?.code) return null;
+    cups[cup.code] = cup;
+    return cup;
+}
+
+async function restoreOpenCupToMemory({ userId = null, sessionId = null }) {
+    if (!isDbConfigured()) return null;
+    if (sessionId && findCupBySessionId(sessionId)) {
+        return findCupBySessionId(sessionId);
+    }
+    try {
+        const bundle = await findOpenCupForIdentity({ userId, sessionId });
+        if (!bundle) return null;
+        if (cups[bundle.cup.code]) {
+            return { code: bundle.cup.code, cup: cups[bundle.cup.code] };
+        }
+        const hydrated = hydrateCup(bundle.cup, bundle.players);
+        putCupInMemory(hydrated);
+        return { code: hydrated.code, cup: hydrated };
+    } catch (err) {
+        console.warn('[cups] restore open cup:', err.message);
+        return null;
+    }
+}
+
+async function ensureCupLoadedByCode(code) {
+    if (cups[code]) return cups[code];
+    if (!isDbConfigured()) return null;
+    try {
+        const bundle = await loadCupBundleByCode(code);
+        if (!bundle) return null;
+        return putCupInMemory(hydrateCup(bundle.cup, bundle.players));
+    } catch (err) {
+        console.warn('[cups] load by code:', err.message);
+        return null;
+    }
+}
+
+function requireCupAuth(socket) {
+    if (!isDbConfigured()) {
+        emitError(socket, 'Cups are unavailable right now');
+        return false;
+    }
+    if (!socket.data?.user?.id) {
+        emitError(socket, 'Sign in with Telegram to play cups');
+        return false;
+    }
+    return true;
+}
+
+async function persistCupSafely(cup, label = 'persist') {
+    if (!cup?.dbId || !isDbConfigured()) return;
+    try {
+        await persistCupTree(cup);
+    } catch (err) {
+        console.warn(`[cups] ${label}:`, err.message);
+    }
+}
+
 function normalizeSessionId(raw) {
     return String(raw || '')
         .replace(/[^a-zA-Z0-9_-]/g, '')
@@ -238,15 +329,6 @@ function requireSession(socket, rawFromMsg = null) {
     return null;
 }
 
-function shufflePlayers(list) {
-    const a = [...list];
-    for (let i = a.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-}
-
 function cupPlayerBySession(cup, sessionId) {
     return cup.players.find((p) => p.sessionId === sessionId) || null;
 }
@@ -265,6 +347,8 @@ function cupPublicState(cup) {
                           id: m.id,
                           label: m.label,
                           round: m.round,
+                          roundSize: m.roundSize,
+                          index: m.index,
                           status: m.status,
                           playerNames: (m.playerIds || []).map((pid) =>
                               pid ? nameFromCupPlayerId(cup, pid) : 'TBD'
@@ -278,6 +362,8 @@ function cupPublicState(cup) {
                       },
                   ])
               ),
+              rounds: cup.bracket.rounds || [],
+              size: cup.bracket.size || null,
               championId: cup.championId || null,
               championName: cup.championId
                   ? nameFromCupPlayerId(cup, cup.championId)
@@ -289,7 +375,7 @@ function cupPublicState(cup) {
         code: cup.code,
         status: cup.status,
         adminId: cup.adminId,
-        maxPlayers: CUP_SIZE,
+        maxPlayers: CUP_MAX,
         players: cup.players.map((p) => ({
             id: p.id,
             sessionId: p.sessionId,
@@ -305,26 +391,37 @@ function cupPublicState(cup) {
     };
 }
 
+function cupIoRoom(code) {
+    return `cup:${code}`;
+}
+
+function joinCupIoRoom(socket, code) {
+    if (socket && code) socket.join(cupIoRoom(code));
+}
+
+function leaveCupIoRoom(socket, code) {
+    if (socket && code) socket.leave(cupIoRoom(code));
+}
+
 function emitCupLobby(cup) {
-    const payload = cupPublicState(cup);
-    for (const p of cup.players) {
-        if (p?.id) io.to(p.id).emit('cupLobbyUpdate', payload);
-    }
+    io.to(cupIoRoom(cup.code)).emit('cupLobbyUpdate', cupPublicState(cup));
 }
 
 function emitCupBracket(cup) {
-    const payload = cupPublicState(cup);
-    for (const p of cup.players) {
-        if (p?.id) io.to(p.id).emit('cupBracketUpdate', payload);
-    }
+    io.to(cupIoRoom(cup.code)).emit('cupBracketUpdate', cupPublicState(cup));
 }
 
 function emitToCupMembers(cup, event, payload, { exceptIds = [] } = {}) {
-    const skip = new Set(exceptIds.filter(Boolean));
-    for (const p of cup.players) {
-        if (!p?.id || skip.has(p.id)) continue;
-        io.to(p.id).emit(event, payload);
+    const skip = exceptIds.filter(Boolean);
+    if (skip.length === 0) {
+        io.to(cupIoRoom(cup.code)).emit(event, payload);
+        return;
     }
+    let target = io.to(cupIoRoom(cup.code));
+    for (const id of skip) {
+        target = target.except(id);
+    }
+    target.emit(event, payload);
 }
 
 function cupMatchSnapshot(cup, match, room) {
@@ -422,123 +519,86 @@ function createCupMatchRoom(cup, matchId) {
 }
 
 function buildCupBracket(cup) {
-    const shuffled = shufflePlayers(cup.players);
+    const tree = buildBracketTree(cup.players);
     cup.bracket = {
-        matches: {
-            sf1: {
-                id: 'sf1',
-                label: 'Semifinal 1',
-                round: 'semifinal',
-                playerIds: [shuffled[0].sessionId, shuffled[1].sessionId],
-                winnerId: null,
-                roomCode: null,
-                status: 'pending',
-            },
-            sf2: {
-                id: 'sf2',
-                label: 'Semifinal 2',
-                round: 'semifinal',
-                playerIds: [shuffled[2].sessionId, shuffled[3].sessionId],
-                winnerId: null,
-                roomCode: null,
-                status: 'pending',
-            },
-            final: {
-                id: 'final',
-                label: 'Final',
-                round: 'final',
-                playerIds: [null, null],
-                winnerId: null,
-                roomCode: null,
-                status: 'pending',
-            },
-        },
+        matches: tree.matches,
+        rounds: tree.rounds,
+        size: tree.size,
     };
     cup.championId = null;
 }
 
-function tryStartCupFinal(cup) {
-    const sf1 = cup.bracket.matches.sf1;
-    const sf2 = cup.bracket.matches.sf2;
-    const final = cup.bracket.matches.final;
-    if (sf1.status !== 'done' || sf2.status !== 'done') return;
-    if (final.status !== 'pending') return;
-    if (!sf1.winnerId || !sf2.winnerId) return;
+function openReadyCupMatches(cup) {
+    for (const matchId of readyMatchIds(cup.bracket.matches)) {
+        createCupMatchRoom(cup, matchId);
+    }
+}
 
-    final.playerIds = [sf1.winnerId, sf2.winnerId];
-    createCupMatchRoom(cup, 'final');
-    emitCupBracket(cup);
-
-    for (const p of cup.players) {
-        if (
-            p.sessionId === sf1.winnerId ||
-            p.sessionId === sf2.winnerId ||
-            !p.id ||
-            p.online === false
-        ) {
-            continue;
-        }
-        io.to(p.id).emit('cupWaiting', {
+function notifyCupMatchOutcome(cup, match, winnerSessionId) {
+    const winner = cupPlayerBySession(cup, winnerSessionId);
+    if (winner?.id && winner.online !== false && match.parentId) {
+        io.to(winner.id).emit('cupWaiting', {
             cupCode: cup.code,
-            message: 'Final is starting — you can watch from Cups soon',
+            message: 'You advanced — waiting for your next match…',
+        });
+    }
+
+    const loserSessionId = (match.playerIds || []).find(
+        (id) => id && id !== winnerSessionId
+    );
+    const loser = loserSessionId
+        ? cupPlayerBySession(cup, loserSessionId)
+        : null;
+    if (loser?.id && loser.online !== false) {
+        io.to(loser.id).emit('cupWaiting', {
+            cupCode: cup.code,
+            message: 'You are out — watch the rest of the cup',
         });
     }
 }
 
-function advanceCupMatch(cupCode, matchId, winnerSessionId) {
+async function advanceCupMatch(cupCode, matchId, winnerSessionId) {
     const cup = cups[cupCode];
     if (!cup?.bracket?.matches?.[matchId]) return;
     const match = cup.bracket.matches[matchId];
     if (match.status === 'done') return;
 
-    match.winnerId = winnerSessionId;
-    match.status = 'done';
-    match.roomCode = null;
+    const { parent, cupFinished } = placeWinner(
+        cup.bracket.matches,
+        matchId,
+        winnerSessionId
+    );
 
+    notifyCupMatchOutcome(cup, match, winnerSessionId);
     emitCupBracket(cup);
+    await persistCupSafely(cup, 'advance');
 
-    if (matchId === 'sf1' || matchId === 'sf2') {
-        const final = cup.bracket.matches.final;
-        if (matchId === 'sf1') final.playerIds[0] = winnerSessionId;
-        else final.playerIds[1] = winnerSessionId;
-
-        const winner = cupPlayerBySession(cup, winnerSessionId);
-        if (winner?.id && winner.online !== false) {
-            io.to(winner.id).emit('cupWaiting', {
-                cupCode: cup.code,
-                message: 'You advanced — waiting for the other semifinal…',
-            });
-        }
-
-        const loserSessionId = (match.playerIds || []).find(
-            (id) => id && id !== winnerSessionId
-        );
-        const loser = loserSessionId
-            ? cupPlayerBySession(cup, loserSessionId)
-            : null;
-        if (loser?.id && loser.online !== false) {
-            io.to(loser.id).emit('cupWaiting', {
-                cupCode: cup.code,
-                message: 'You are out — watch the rest of the cup',
-            });
-        }
-
-        tryStartCupFinal(cup);
+    if (parent) {
+        createCupMatchRoom(cup, parent.id);
+        emitCupBracket(cup);
+        await persistCupSafely(cup, 'open-parent');
         return;
     }
 
-    if (matchId === 'final') {
+    if (cupFinished) {
         cup.status = 'finished';
         cup.championId = winnerSessionId;
-        const payload = cupPublicState(cup);
-        for (const p of cup.players) {
-            if (p?.id && p.online !== false) io.to(p.id).emit('cupFinished', payload);
+        if (cup.dbId && isDbConfigured()) {
+            const championUserId =
+                cupPlayerBySession(cup, winnerSessionId)?.userId || null;
+            try {
+                await updateCupStatus(cup.dbId, 'finished', { championUserId });
+            } catch (err) {
+                console.warn('[cups] finish cup:', err.message);
+            }
         }
+        io.to(cupIoRoom(cup.code)).emit('cupFinished', cupPublicState(cup));
         emitCupBracket(cup);
+        await persistCupSafely(cup, 'finish-tree');
     }
 }
 
-function removePlayerFromCup(socketId, sessionId = null) {
+async function removePlayerFromCup(socketId, sessionId = null) {
     const found =
         findCupBySocketId(socketId) ||
         (sessionId ? findCupBySessionId(sessionId) : null);
@@ -548,13 +608,30 @@ function removePlayerFromCup(socketId, sessionId = null) {
         cup.players.find((p) => p.id === socketId) ||
         (sessionId ? cupPlayerBySession(cup, sessionId) : null);
     const leavingSession = leaving?.sessionId;
+    const leavingUserId = leaving?.userId;
     cup.players = cup.players.filter(
         (p) =>
             p.id !== leaving?.id &&
             !(leavingSession && p.sessionId === leavingSession)
     );
 
+    if (cup.dbId && leavingUserId && isDbConfigured()) {
+        try {
+            await removeCupPlayerRow(cup.dbId, leavingUserId);
+        } catch (err) {
+            console.warn('[cups] remove player:', err.message);
+        }
+    }
+
     if (cup.players.length === 0) {
+        // Keep finished cups in DB for history; dissolve lobby cups fully.
+        if (cup.status !== 'finished' && cup.dbId && isDbConfigured()) {
+            try {
+                await deleteCupRow(cup.dbId);
+            } catch (err) {
+                console.warn('[cups] delete cup:', err.message);
+            }
+        }
         delete cups[code];
         return {
             code,
@@ -565,6 +642,13 @@ function removePlayerFromCup(socketId, sessionId = null) {
 
     if (leavingSession && cup.adminId === leavingSession) {
         cup.adminId = cup.players[0].sessionId;
+        if (cup.dbId && cup.players[0].userId && isDbConfigured()) {
+            try {
+                await updateCupAdmin(cup.dbId, cup.players[0].userId);
+            } catch (err) {
+                console.warn('[cups] update admin:', err.message);
+            }
+        }
     }
 
     emitCupLobby(cup);
@@ -572,7 +656,10 @@ function removePlayerFromCup(socketId, sessionId = null) {
 }
 
 function isSocketBusy(socketId, sessionId = null) {
-    if (findCupBySocketId(socketId) || (sessionId && findCupBySessionId(sessionId))) {
+    if (
+        findBlockingCupBySocketId(socketId) ||
+        (sessionId && findBlockingCupBySessionId(sessionId))
+    ) {
         return true;
     }
     const found =
@@ -808,8 +895,20 @@ async function finishGame(code, winnerKey) {
 
     cleanupRoom(code);
 
-    if (isCupMatch && cupId && cupMatchId && winnerSessionId) {
-        advanceCupMatch(cupId, cupMatchId, winnerSessionId);
+    if (isCupMatch && cupId && cupMatchId) {
+        if (winnerSessionId) {
+            await advanceCupMatch(cupId, cupMatchId, winnerSessionId);
+        } else {
+            // Avoid leaving the bracket card stuck on "Live" if winner seat has no session.
+            const cup = cups[cupId];
+            const match = cup?.bracket?.matches?.[cupMatchId];
+            if (match && match.status !== 'done') {
+                match.status = 'done';
+                match.roomCode = null;
+                emitCupBracket(cup);
+                await persistCupSafely(cup, 'force-done');
+            }
+        }
     }
 
     if (isCupMatch) return;
@@ -1016,13 +1115,17 @@ io.on('connection', (socket) => {
         }
     })();
 
-    socket.on('createRoom', (msg = {}) => {
+    socket.on('createRoom', async (msg = {}) => {
         if (!requireSession(socket, msg.sessionId)) return;
+        await restoreOpenCupToMemory({
+            userId: socket.data?.user?.id || null,
+            sessionId: socket.data.sessionId,
+        });
         if (
             findRoomBySocketId(socket.id) ||
             findRoomBySessionId(socket.data.sessionId) ||
-            findCupBySocketId(socket.id) ||
-            findCupBySessionId(socket.data.sessionId)
+            findBlockingCupBySocketId(socket.id) ||
+            findBlockingCupBySessionId(socket.data.sessionId)
         ) {
             emitError(socket, 'You are already in a room');
             return;
@@ -1047,13 +1150,17 @@ io.on('connection', (socket) => {
         });
     });
 
-    socket.on('playVsAI', (msg = {}) => {
+    socket.on('playVsAI', async (msg = {}) => {
         if (!requireSession(socket, msg.sessionId)) return;
+        await restoreOpenCupToMemory({
+            userId: socket.data?.user?.id || null,
+            sessionId: socket.data.sessionId,
+        });
         if (
             findRoomBySocketId(socket.id) ||
             findRoomBySessionId(socket.data.sessionId) ||
-            findCupBySocketId(socket.id) ||
-            findCupBySessionId(socket.data.sessionId)
+            findBlockingCupBySocketId(socket.id) ||
+            findBlockingCupBySessionId(socket.data.sessionId)
         ) {
             emitError(socket, 'You are already in a room');
             return;
@@ -1097,13 +1204,17 @@ io.on('connection', (socket) => {
         });
     });
 
-    socket.on('joinRoom', (msg = {}) => {
+    socket.on('joinRoom', async (msg = {}) => {
         if (!requireSession(socket, msg.sessionId)) return;
+        await restoreOpenCupToMemory({
+            userId: socket.data?.user?.id || null,
+            sessionId: socket.data.sessionId,
+        });
         if (
             findRoomBySocketId(socket.id) ||
             findRoomBySessionId(socket.data.sessionId) ||
-            findCupBySocketId(socket.id) ||
-            findCupBySessionId(socket.data.sessionId)
+            findBlockingCupBySocketId(socket.id) ||
+            findBlockingCupBySessionId(socket.data.sessionId)
         ) {
             emitError(socket, 'You are already in a room');
             return;
@@ -1369,21 +1480,31 @@ io.on('connection', (socket) => {
 
     // ——— Session resume (M5) ———
 
-    socket.on('sessionHello', (msg = {}) => {
+    socket.on('sessionHello', async (msg = {}) => {
         const sessionId = bindSession(socket, msg.sessionId);
         if (!sessionId) {
             emitError(socket, 'Missing session id');
             return;
         }
 
-        const cupFound = findCupBySessionId(sessionId);
+        let cupFound = findCupBySessionId(sessionId);
+        if (!cupFound) {
+            cupFound = await restoreOpenCupToMemory({
+                userId: socket.data?.user?.id || null,
+                sessionId,
+            });
+        }
         if (cupFound) {
             const { cup } = cupFound;
             const player = cupPlayerBySession(cup, sessionId);
             if (player) {
                 player.id = socket.id;
                 player.online = true;
+                if (!player.userId && socket.data?.user?.id) {
+                    player.userId = socket.data.user.id;
+                }
             }
+            joinCupIoRoom(socket, cup.code);
         }
 
         const roomFound = findRoomBySessionId(sessionId);
@@ -1416,13 +1537,20 @@ io.on('connection', (socket) => {
 
     // ——— Cups ———
 
-    socket.on('cupCreate', (msg = {}) => {
+    socket.on('cupCreate', async (msg = {}) => {
         if (!requireSession(socket, msg.sessionId)) return;
+        if (!requireCupAuth(socket)) return;
+
+        await restoreOpenCupToMemory({
+            userId: socket.data.user.id,
+            sessionId: socket.data.sessionId,
+        });
+
         if (
             findRoomBySocketId(socket.id) ||
             findRoomBySessionId(socket.data.sessionId) ||
-            findCupBySocketId(socket.id) ||
-            findCupBySessionId(socket.data.sessionId)
+            findBlockingCupBySocketId(socket.id) ||
+            findBlockingCupBySessionId(socket.data.sessionId)
         ) {
             emitError(socket, 'Leave your current game or cup first');
             return;
@@ -1430,8 +1558,31 @@ io.on('connection', (socket) => {
 
         const ident = identityFromSocket(socket);
         const code = generateCupCode();
+
+        let dbRow;
+        try {
+            dbRow = await createCupRow({
+                code,
+                adminUserId: ident.userId,
+                maxPlayers: CUP_MAX,
+            });
+            await addCupPlayerRow({
+                cupId: dbRow.id,
+                userId: ident.userId,
+                sessionId: socket.data.sessionId,
+                displayName: ident.displayName,
+                eloSnapshot: ident.elo,
+                slot: 0,
+            });
+        } catch (err) {
+            console.warn('[cups] create:', err.message);
+            emitError(socket, 'Could not create cup');
+            return;
+        }
+
         cups[code] = {
             code,
+            dbId: dbRow.id,
             adminId: socket.data.sessionId,
             status: 'lobby',
             players: [
@@ -1447,17 +1598,25 @@ io.on('connection', (socket) => {
             bracket: null,
         };
 
+        joinCupIoRoom(socket, code);
         socket.emit('cupCreated', cupPublicState(cups[code]));
         emitCupLobby(cups[code]);
     });
 
-    socket.on('cupJoin', (msg = {}) => {
+    socket.on('cupJoin', async (msg = {}) => {
         if (!requireSession(socket, msg.sessionId)) return;
+        if (!requireCupAuth(socket)) return;
+
+        await restoreOpenCupToMemory({
+            userId: socket.data.user.id,
+            sessionId: socket.data.sessionId,
+        });
+
         if (
             findRoomBySocketId(socket.id) ||
             findRoomBySessionId(socket.data.sessionId) ||
-            findCupBySocketId(socket.id) ||
-            findCupBySessionId(socket.data.sessionId)
+            findBlockingCupBySocketId(socket.id) ||
+            findBlockingCupBySessionId(socket.data.sessionId)
         ) {
             emitError(socket, 'Leave your current game or cup first');
             return;
@@ -1469,7 +1628,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const cup = cups[code];
+        const cup = (await ensureCupLoadedByCode(code)) || cups[code];
         if (!cup) {
             emitError(socket, 'Cup not found');
             return;
@@ -1478,7 +1637,7 @@ io.on('connection', (socket) => {
             emitError(socket, 'This cup has already started');
             return;
         }
-        if (cup.players.length >= CUP_SIZE) {
+        if (cup.players.length >= CUP_MAX) {
             emitError(socket, 'This cup is full');
             return;
         }
@@ -1496,6 +1655,23 @@ io.on('connection', (socket) => {
             return;
         }
 
+        if (cup.dbId) {
+            try {
+                await addCupPlayerRow({
+                    cupId: cup.dbId,
+                    userId: ident.userId,
+                    sessionId: socket.data.sessionId,
+                    displayName: ident.displayName,
+                    eloSnapshot: ident.elo,
+                    slot: cup.players.length,
+                });
+            } catch (err) {
+                console.warn('[cups] join:', err.message);
+                emitError(socket, 'Could not join cup');
+                return;
+            }
+        }
+
         cup.players.push({
             id: socket.id,
             sessionId: socket.data.sessionId,
@@ -1505,37 +1681,47 @@ io.on('connection', (socket) => {
             online: true,
         });
 
+        joinCupIoRoom(socket, code);
         socket.emit('cupJoined', cupPublicState(cup));
         emitCupLobby(cup);
     });
 
-    socket.on('cupLeave', () => {
-        const found =
+    socket.on('cupLeave', async () => {
+        let found =
             findCupBySocketId(socket.id) ||
             findCupBySessionId(socket.data.sessionId);
+        if (!found && socket.data?.user?.id) {
+            found = await restoreOpenCupToMemory({
+                userId: socket.data.user.id,
+                sessionId: socket.data.sessionId,
+            });
+        }
         if (!found) {
             emitError(socket, 'You are not in a cup');
             return;
         }
-        if (found.cup.status !== 'lobby') {
+        if (found.cup.status !== 'lobby' && found.cup.status !== 'finished') {
             emitError(socket, 'Cannot leave after the cup has started');
             return;
         }
         const player =
             found.cup.players.find((p) => p.id === socket.id) ||
             cupPlayerBySession(found.cup, socket.data.sessionId);
+        const cupCode = found.code;
         const result = player
-            ? removePlayerFromCup(player.id, player.sessionId)
+            ? await removePlayerFromCup(player.id, player.sessionId)
             : null;
         if (!result) {
             emitError(socket, 'You are not in a cup');
             return;
         }
+        leaveCupIoRoom(socket, cupCode);
         socket.emit('cupLeft', { code: result.code });
     });
 
-    socket.on('cupStart', (msg = {}) => {
+    socket.on('cupStart', async (msg = {}) => {
         if (!requireSession(socket, msg.sessionId)) return;
+        if (!requireCupAuth(socket)) return;
         const found =
             findCupBySocketId(socket.id) ||
             findCupBySessionId(socket.data.sessionId);
@@ -1552,28 +1738,44 @@ io.on('connection', (socket) => {
             emitError(socket, 'Cup already started');
             return;
         }
-        if (cup.players.length !== CUP_SIZE) {
-            emitError(socket, `Need exactly ${CUP_SIZE} players to start`);
+        const n = cup.players.length;
+        if (n < CUP_MIN_START || n > CUP_MAX) {
+            emitError(
+                socket,
+                `Need ${CUP_MIN_START}–${CUP_MAX} players to start (have ${n})`
+            );
             return;
         }
 
         cup.status = 'running';
         buildCupBracket(cup);
-        createCupMatchRoom(cup, 'sf1');
-        createCupMatchRoom(cup, 'sf2');
+        openReadyCupMatches(cup);
+
+        if (cup.dbId && isDbConfigured()) {
+            try {
+                await updateCupStatus(cup.dbId, 'running');
+                await persistCupTree(cup);
+            } catch (err) {
+                console.warn('[cups] start persist:', err.message);
+            }
+        }
 
         const payload = cupPublicState(cup);
-        for (const p of cup.players) {
-            if (p?.id && p.online !== false) io.to(p.id).emit('cupStarted', payload);
-        }
+        io.to(cupIoRoom(cup.code)).emit('cupStarted', payload);
         emitCupBracket(cup);
         emitCupLobby(cup);
     });
 
-    socket.on('cupSpectate', (msg = {}) => {
-        const found =
+    socket.on('cupSpectate', async (msg = {}) => {
+        let found =
             findCupBySocketId(socket.id) ||
             findCupBySessionId(socket.data.sessionId);
+        if (!found) {
+            found = await restoreOpenCupToMemory({
+                userId: socket.data?.user?.id || null,
+                sessionId: socket.data.sessionId,
+            });
+        }
         if (!found) {
             emitError(socket, 'You are not in a cup');
             return;

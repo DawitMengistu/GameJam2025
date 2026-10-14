@@ -140,11 +140,13 @@
         sideRoom: document.getElementById('side-room'),
         sideRole: document.getElementById('side-role'),
         gameCon: document.querySelector('.game-con'),
+        playShell: document.querySelector('.play-shell'),
         myTime: document.getElementById('my-time-bar'),
         oppTime: document.getElementById('opp-time-bar'),
         p1Label: document.getElementById('p1-label'),
         p2Label: document.getElementById('p2-label'),
         digitTracker: document.getElementById('digit-tracker'),
+        answerCon: document.querySelector('.answer-con'),
         resultPopup: document.getElementById('result-popup'),
         resultPopupText: document.getElementById('result-popup-text'),
         matchChat: document.getElementById('match-chat'),
@@ -309,7 +311,48 @@
         return m.status === 'playing' || m.status === 'done' || m.status === 'ready';
     }
 
-    function renderCupBracketMini(bracket) {
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    const CUP_CROWN_SVG =
+        '<svg class="cup-crown-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false"><path fill="currentColor" d="M5 16h14l1.2-7.2-3.7 2.5L12 6l-4.5 5.3L3.8 8.8 5 16zm-1 2h16v2H4v-2z"/></svg>';
+
+    function cupMatchStatusHtml(m, { isChampion = false } = {}) {
+        if (m.status === 'done') {
+            const name = escapeHtml(m.winnerName || '—');
+            const label = isChampion ? 'Cup champion' : 'Match winner';
+            return `<div class="cup-match-status is-winner${
+                isChampion ? ' is-champion' : ''
+            }" title="${label}">
+                <span class="cup-crown">${CUP_CROWN_SVG}</span>
+                <span class="cup-winner-name">${name}</span>
+            </div>`;
+        }
+        const text =
+            m.status === 'playing'
+                ? 'Live'
+                : m.status === 'ready'
+                  ? 'Setting secrets'
+                  : 'Pending';
+        return `<div class="cup-match-status">${text}</div>`;
+    }
+
+    function cupRoundTitle(roundKey) {
+        if (roundKey === 'final') return 'Final';
+        if (roundKey === 'r4') return 'Semifinals';
+        if (roundKey === 'r8') return 'Quarterfinals';
+        if (typeof roundKey === 'string' && roundKey.startsWith('r')) {
+            return `Round of ${roundKey.slice(1)}`;
+        }
+        return roundKey || 'Round';
+    }
+
+    function renderCupBracketMini(bracket, { cupStatus = null } = {}) {
         if (!els.cupBracketMini) return;
         if (!bracket?.matches) {
             els.cupBracketMini.classList.add('hide');
@@ -317,40 +360,61 @@
             return;
         }
 
-        const card = (id, areaClass) => {
-            const m = bracket.matches[id];
+        const cupDone = cupStatus === 'finished';
+        const championId = bracket.championId || null;
+        const rounds =
+            Array.isArray(bracket.rounds) && bracket.rounds.length
+                ? bracket.rounds
+                : [...new Set(Object.values(bracket.matches).map((m) => m.round))];
+
+        const card = (m) => {
             if (!m) return '';
-            const names = (m.playerNames || ['TBD', 'TBD']).join(' vs ');
-            const status =
-                m.status === 'done'
-                    ? `Winner: ${m.winnerName || '—'}`
-                    : m.status === 'playing'
-                      ? 'Live'
-                      : m.status === 'ready'
-                        ? 'Setting secrets'
-                        : 'Pending';
-            const liveClass =
-                m.status === 'playing' ? ' is-live' : m.status === 'done' ? ' is-done' : '';
+            const names = escapeHtml((m.playerNames || ['TBD', 'TBD']).join(' vs '));
+            const isChampion =
+                cupDone &&
+                m.id === 'final' &&
+                m.status === 'done' &&
+                Boolean(m.winnerName || championId);
+            const rowClass = [
+                'cup-match-row',
+                m.status === 'playing' ? 'is-live' : '',
+                m.status === 'done' ? 'is-done' : '',
+                isChampion ? 'is-champion' : '',
+            ]
+                .filter(Boolean)
+                .join(' ');
             const watch =
                 canSpectateMatch(m) && (m.status === 'playing' || m.status === 'done')
-                    ? `<button type="button" class="cup-watch-btn" data-cup-watch="${m.id}">${
-                          m.status === 'done' ? 'View board' : 'Watch'
-                      }</button>`
+                    ? `<button type="button" class="cup-watch-btn" data-cup-watch="${escapeHtml(
+                          m.id
+                      )}">${m.status === 'done' ? 'View board' : 'Watch'}</button>`
                     : '';
-            return `<div class="cup-match-row${liveClass} ${areaClass}">
-                <div class="cup-match-label">${m.label}</div>
+            return `<div class="${rowClass}">
+                <div class="cup-match-label">${escapeHtml(m.label || m.id)}</div>
                 <div class="cup-match-names">${names}</div>
-                <div class="cup-match-status">${status}</div>
+                ${cupMatchStatusHtml(m, { isChampion })}
                 ${watch}
             </div>`;
         };
 
-        els.cupBracketMini.innerHTML = `
-            ${card('sf1', 'cup-bracket-sf1')}
-            ${card('sf2', 'cup-bracket-sf2')}
-            <div class="cup-bracket-connector" aria-hidden="true">→</div>
-            ${card('final', 'cup-bracket-final')}
-        `;
+        const columns = rounds
+            .map((roundKey) => {
+                const matches = Object.values(bracket.matches)
+                    .filter((m) => m.round === roundKey)
+                    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+                if (!matches.length) return '';
+                return `<div class="cup-bracket-round" data-round="${escapeHtml(roundKey)}">
+                    <div class="cup-bracket-round-title">${escapeHtml(
+                        cupRoundTitle(roundKey)
+                    )}</div>
+                    <div class="cup-bracket-round-matches">
+                        ${matches.map(card).join('')}
+                    </div>
+                </div>`;
+            })
+            .join('');
+
+        els.cupBracketMini.innerHTML = columns;
         els.cupBracketMini.classList.remove('hide');
 
         els.cupBracketMini.querySelectorAll('[data-cup-watch]').forEach((btn) => {
@@ -362,11 +426,55 @@
         });
     }
 
+    /** Clear stuck "Live view" when a spectated match (or the cup) ends. */
+    function markSpectateMatchEnded({ winnerName = null, label = 'Match' } = {}) {
+        if (!state.spectating) return;
+        state.highlightGuesses = true;
+        if (els.playEloLine) {
+            els.playEloLine.textContent = winnerName
+                ? `Final · ${winnerName} won`
+                : 'Match finished';
+            els.playEloLine.classList.remove('hide');
+        }
+        els.playStatus.textContent = `Ended · ${label}`;
+    }
+
+    function syncSpectateFromCupPayload(payload) {
+        if (!state.spectating || !payload) return;
+        const match =
+            state.spectateMatchId && payload.bracket?.matches
+                ? payload.bracket.matches[state.spectateMatchId]
+                : null;
+        const ended =
+            match?.status === 'done' ||
+            payload.status === 'finished' ||
+            Boolean(payload.championName);
+        if (!ended) return;
+        markSpectateMatchEnded({
+            winnerName:
+                match?.winnerName ||
+                payload.championName ||
+                payload.bracket?.championName ||
+                null,
+            label: match?.label || (payload.status === 'finished' ? 'Final' : 'Match'),
+        });
+    }
+
+    function setSpectateShell(on) {
+        els.playShell?.classList.toggle('spectating', on);
+        els.gameCon?.classList.toggle('spectating', on);
+        if (!on) {
+            els.digitTracker?.classList.remove('hide');
+            els.answerCon?.classList.remove('hide');
+        }
+    }
+
     function exitSpectate() {
         state.spectating = false;
         state.spectateMatchId = null;
         state.spectateRoomId = null;
-        els.gameCon?.classList.remove('spectating', 'game-ended');
+        setSpectateShell(false);
+        els.gameCon?.classList.remove('game-ended');
         els.spectateActions?.classList.add('hide');
         els.playActions?.classList.remove('hide');
         els.endActions?.classList.add('hide');
@@ -379,7 +487,6 @@
         els.mySecretDisplay.textContent = '____';
         els.p1Label?.classList.remove('you-label');
         els.p2Label?.classList.remove('you-label');
-        els.digitTracker?.classList.remove('hide');
         showScreen('cupLobby');
     }
 
@@ -391,11 +498,13 @@
         state.gameEnded = false;
         stopAllTimers();
 
-        els.gameCon?.classList.add('spectating');
+        setSpectateShell(true);
         els.gameCon?.classList.remove('game-ended');
         els.playActions?.classList.add('hide');
         els.endActions?.classList.add('hide');
         els.spectateActions?.classList.remove('hide');
+        els.digitTracker?.classList.add('hide');
+        els.answerCon?.classList.add('hide');
 
         els.playStatus.textContent = `Spectating · ${snapshot.label || 'Match'}`;
         els.playStatus.classList.remove('status-win', 'status-lose', 'animate-win-loss');
@@ -416,7 +525,6 @@
         els.sideRoom.textContent = `Cup ${snapshot.cupCode || state.cupId || '—'}`;
         els.sideRole.textContent = 'Spectator';
         els.matchChat?.classList.add('hide');
-        els.digitTracker?.classList.add('hide');
 
         state.highlightGuesses =
             !snapshot.live || snapshot.status === 'done' || Boolean(snapshot.winnerName);
@@ -435,9 +543,10 @@
         state.cupAdminId = payload.adminId;
         state.cupStatus = payload.status;
         state.cupBracket = payload.bracket || null;
-        const max = payload.maxPlayers || 4;
+        const max = payload.maxPlayers || 64;
         const count = payload.players?.length || 0;
         const isAdmin = payload.adminId === sessionId;
+        const minStart = 4;
 
         if (els.cupCodeText) els.cupCodeText.textContent = payload.code;
         if (els.cupLobbyStatus) {
@@ -480,20 +589,31 @@
                 .join('');
         }
 
-        renderCupBracketMini(payload.bracket);
+        renderCupBracketMini(payload.bracket, { cupStatus: payload.status });
+        syncSpectateFromCupPayload(payload);
 
         if (els.btnCupStart) {
             const canStart =
-                isAdmin && payload.status === 'lobby' && count === max;
-            els.btnCupStart.classList.toggle('hide', !isAdmin || payload.status !== 'lobby');
+                isAdmin &&
+                payload.status === 'lobby' &&
+                count >= minStart &&
+                count <= max;
+            els.btnCupStart.classList.toggle(
+                'hide',
+                !isAdmin || payload.status !== 'lobby'
+            );
             els.btnCupStart.disabled = !canStart;
             els.btnCupStart.textContent = canStart
-                ? 'Start Cup'
-                : `Start Cup (${count}/${max})`;
+                ? `Start Cup (${count})`
+                : `Start Cup (${count}/${minStart}+)`;
         }
 
         if (els.btnCupLeave) {
-            els.btnCupLeave.classList.toggle('hide', payload.status !== 'lobby');
+            const canLeave =
+                payload.status === 'lobby' || payload.status === 'finished';
+            els.btnCupLeave.classList.toggle('hide', !canLeave);
+            els.btnCupLeave.textContent =
+                payload.status === 'finished' ? 'Exit cup' : 'Leave cup';
         }
 
         if (
@@ -524,7 +644,7 @@
         els.historyBoard.innerHTML = '';
         els.guessInput.disabled = false;
         els.btnResign.disabled = false;
-        els.gameCon?.classList.remove('spectating');
+        setSpectateShell(false);
         els.spectateActions?.classList.add('hide');
         resetDigitTracker();
         clearMatchChat();
@@ -550,7 +670,7 @@
             els.cupBracketMini.innerHTML = '';
         }
         els.btnCupStart?.classList.add('hide');
-        els.gameCon?.classList.remove('spectating');
+        setSpectateShell(false);
         els.spectateActions?.classList.add('hide');
         if (els.btnCupLeave) {
             els.btnCupLeave.classList.remove('hide');
@@ -565,8 +685,11 @@
             return;
         }
         if (state.cupStatus === 'finished') {
+            state.intentionalCupLeave = true;
+            socket.emit('cupLeave');
             clearCupState();
             showScreen('cups');
+            showToast('Left the cup', 'info');
             return;
         }
         if (state.cupStatus !== 'lobby') {
@@ -1047,7 +1170,7 @@
         state.spectating = false;
         state.spectateMatchId = null;
         state.spectateRoomId = null;
-        els.gameCon?.classList.remove('spectating');
+        setSpectateShell(false);
         els.spectateActions?.classList.add('hide');
         els.mySecretDisplay.textContent = state.secret;
         els.sideRoom.textContent = `Room ${state.roomId}`;
@@ -1067,7 +1190,6 @@
         resetDigitTracker();
         clearMatchChat();
         clearEndBanner();
-        els.digitTracker?.classList.remove('hide');
         showScreen('play');
         syncMatchChatVisibility();
         if (opts.startTimer === false) {
@@ -1376,8 +1498,8 @@
         const code = state.cupId;
         if (!code) return;
         try {
-            await navigator.clipboard.writeText(code);
-            showToast('Cup code copied', 'info');
+            await navigator.clipboard.writeText(buildShareLink({ cup: code }));
+            showToast('Cup invite link copied', 'info');
         } catch {
             showToast('Could not copy — select the code manually', 'error');
         }
@@ -1439,8 +1561,8 @@
         const code = state.roomId;
         if (!code) return;
         try {
-            await navigator.clipboard.writeText(code);
-            showToast('Code copied', 'info');
+            await navigator.clipboard.writeText(buildShareLink({ room: code }));
+            showToast('Room invite link copied', 'info');
         } catch {
             showToast('Could not copy — select the code manually', 'error');
         }
@@ -1616,28 +1738,22 @@
             p2Name: msg.playerTwoName || 'Player Two',
         });
         if (msg.status === 'done') {
-            state.highlightGuesses = true;
             if (msg.playerOneSecret) state.reviewP1Secret = msg.playerOneSecret;
             if (msg.playerTwoSecret) state.reviewP2Secret = msg.playerTwoSecret;
-        }
-        renderResults(msg.playerOneHistory || [], msg.playerTwoHistory || []);
-        if (els.playEloLine) {
-            if (msg.status === 'done') {
-                els.playEloLine.textContent = msg.winnerName
-                    ? `Final · ${msg.winnerName} won`
-                    : 'Match finished';
-            } else {
-                els.playEloLine.textContent = 'Live view · read only';
-            }
+            markSpectateMatchEnded({
+                winnerName: msg.winnerName || null,
+                label: msg.label || 'Match',
+            });
+        } else if (els.playEloLine) {
+            els.playEloLine.textContent = 'Live view · read only';
             els.playEloLine.classList.remove('hide');
         }
-        if (msg.status === 'done') {
-            els.playStatus.textContent = `Ended · ${msg.label || 'Match'}`;
-        }
+        renderResults(msg.playerOneHistory || [], msg.playerTwoHistory || []);
     });
 
     socket.on('cupFinished', (payload) => {
         renderCupLobby(payload, { forceScreen: !state.roomId || state.gameEnded });
+        syncSpectateFromCupPayload(payload);
         const name = payload?.championName || 'Champion';
         showToast(`${name} wins the cup!`, 'info');
         if (els.btnCupLeave) {
@@ -1874,7 +1990,68 @@
 
     socket.on('sessionRestored', (msg) => {
         applySessionRestored(msg);
+        tryConsumeInviteLink(msg);
     });
+
+    function normalizeInviteCode(raw) {
+        return String(raw || '')
+            .trim()
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, '')
+            .slice(0, 6);
+    }
+
+    function readInviteFromUrl() {
+        const params = new URLSearchParams(location.search);
+        const cup = normalizeInviteCode(params.get('cup'));
+        const room = normalizeInviteCode(params.get('room'));
+        if (!cup && !room) return null;
+        return { cup: cup || null, room: room || null };
+    }
+
+    function clearInviteFromUrl() {
+        const url = new URL(location.href);
+        if (!url.searchParams.has('cup') && !url.searchParams.has('room')) return;
+        url.searchParams.delete('cup');
+        url.searchParams.delete('room');
+        const next = `${url.pathname}${url.search}${url.hash}`;
+        history.replaceState({}, '', next);
+    }
+
+    function buildShareLink({ cup = null, room = null } = {}) {
+        const url = new URL(location.origin + location.pathname);
+        if (cup) url.searchParams.set('cup', normalizeInviteCode(cup));
+        else if (room) url.searchParams.set('room', normalizeInviteCode(room));
+        return url.toString();
+    }
+
+    let pendingInvite = readInviteFromUrl();
+
+    function tryConsumeInviteLink(restored = null) {
+        if (!pendingInvite) return;
+        const invite = pendingInvite;
+        pendingInvite = null;
+        clearInviteFromUrl();
+
+        // Prefer an already-restored session over joining a second place.
+        if (restored?.cup || restored?.room || state.cupId || state.roomId) {
+            return;
+        }
+
+        if (invite.cup) {
+            if (els.cupJoinInput) els.cupJoinInput.value = invite.cup;
+            socket.emit('cupJoin', { code: invite.cup, sessionId });
+            showToast(`Joining cup ${invite.cup}…`, 'info');
+            return;
+        }
+
+        if (invite.room) {
+            els.joinCodeInput.value = invite.room;
+            state.vsAI = false;
+            socket.emit('joinRoom', { code: invite.room, sessionId });
+            showToast(`Joining room ${invite.room}…`, 'info');
+        }
+    }
 
     function emitSessionHello() {
         socket.emit('sessionHello', {
