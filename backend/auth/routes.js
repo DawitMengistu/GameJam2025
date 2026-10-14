@@ -1,7 +1,21 @@
 import { Router } from 'express';
 import { isDbConfigured } from '../db/pool.js';
-import { listGamesForUser, AI_DEFAULT_ELO } from '../db/games.js';
+import {
+    listGamesForUser,
+    listCupMatchHistoryForUser,
+    getGameDetailForUser,
+    getCupMatchDetailForUser,
+    AI_DEFAULT_ELO,
+} from '../db/games.js';
 import { ELO_START } from '../db/elo.js';
+import {
+    createFriendRequest,
+    deleteFriendship,
+    listFriendshipsForUser,
+    respondFriendRequest,
+    searchUsers,
+} from '../db/friends.js';
+import { isUserOnline } from '../presence.js';
 import {
     upsertTelegramUser,
     createMagicLink,
@@ -125,11 +139,123 @@ router.get('/config', (_req, res) => {
 
 router.get('/history', dbRequired, requireUser, async (req, res) => {
     try {
-        const games = await listGamesForUser(req.user.id, 40);
-        return res.json({ games });
+        const [games, cupMatches] = await Promise.all([
+            listGamesForUser(req.user.id, 40),
+            listCupMatchHistoryForUser(req.user.id, 20),
+        ]);
+        const merged = [...games, ...cupMatches].sort((a, b) => {
+            const ta = a.finished_at ? new Date(a.finished_at).getTime() : 0;
+            const tb = b.finished_at ? new Date(b.finished_at).getTime() : 0;
+            return tb - ta;
+        });
+        return res.json({ games: merged.slice(0, 50) });
     } catch (err) {
         console.error('[api] history:', err);
         return res.status(500).json({ error: 'Could not load history' });
+    }
+});
+
+router.get('/history/:id', dbRequired, requireUser, async (req, res) => {
+    try {
+        const rawId = String(req.params.id || '').trim();
+        if (!rawId) return res.status(400).json({ error: 'id required' });
+
+        if (rawId.startsWith('cup:')) {
+            const cupMatchId = rawId.slice(4);
+            const detail = await getCupMatchDetailForUser(
+                req.user.id,
+                cupMatchId
+            );
+            if (!detail) return res.status(404).json({ error: 'Not found' });
+            return res.json({ game: detail });
+        }
+
+        const detail = await getGameDetailForUser(req.user.id, rawId);
+        if (!detail) return res.status(404).json({ error: 'Not found' });
+        return res.json({ game: detail });
+    } catch (err) {
+        console.error('[api] history detail:', err);
+        return res.status(500).json({ error: 'Could not load game' });
+    }
+});
+
+router.get('/friends', dbRequired, requireUser, async (req, res) => {
+    try {
+        const lists = await listFriendshipsForUser(req.user.id);
+        const withOnline = (items) =>
+            items.map((item) => ({
+                ...item,
+                online: isUserOnline(item.friend?.id),
+            }));
+        return res.json({
+            accepted: withOnline(lists.accepted),
+            pendingIn: withOnline(lists.pendingIn),
+            pendingOut: withOnline(lists.pendingOut),
+        });
+    } catch (err) {
+        console.error('[api] friends:', err);
+        return res.status(500).json({ error: 'Could not load friends' });
+    }
+});
+
+router.get('/friends/search', dbRequired, requireUser, async (req, res) => {
+    try {
+        const q = String(req.query?.q ?? '');
+        const users = await searchUsers(req.user.id, q);
+        return res.json({
+            users: users.map((u) => ({
+                ...u,
+                online: isUserOnline(u.id),
+            })),
+        });
+    } catch (err) {
+        console.error('[api] friends search:', err);
+        return res.status(500).json({ error: 'Search failed' });
+    }
+});
+
+router.post('/friends/request', dbRequired, requireUser, async (req, res) => {
+    try {
+        const userId = String(req.body?.userId ?? '').trim();
+        if (!userId) return res.status(400).json({ error: 'userId required' });
+        const result = await createFriendRequest(req.user.id, userId);
+        if (!result.ok) return res.status(400).json({ error: result.reason });
+        return res.json({ ok: true, friendship: result.friendship });
+    } catch (err) {
+        console.error('[api] friends request:', err);
+        return res.status(500).json({ error: 'Could not send request' });
+    }
+});
+
+router.post('/friends/respond', dbRequired, requireUser, async (req, res) => {
+    try {
+        const friendshipId = String(req.body?.friendshipId ?? '').trim();
+        const accept = Boolean(req.body?.accept);
+        if (!friendshipId) {
+            return res.status(400).json({ error: 'friendshipId required' });
+        }
+        const result = await respondFriendRequest(
+            req.user.id,
+            friendshipId,
+            accept
+        );
+        if (!result.ok) return res.status(400).json({ error: result.reason });
+        return res.json({ ok: true, friendship: result.friendship });
+    } catch (err) {
+        console.error('[api] friends respond:', err);
+        return res.status(500).json({ error: 'Could not respond' });
+    }
+});
+
+router.delete('/friends/:id', dbRequired, requireUser, async (req, res) => {
+    try {
+        const id = String(req.params.id || '').trim();
+        const result = await deleteFriendship(req.user.id, id);
+        if (!result.ok) return res.status(404).json({ error: result.reason });
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error('[api] friends delete:', err);
+        return res.status(500).json({ error: 'Could not remove' });
     }
 });
 

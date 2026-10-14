@@ -23,6 +23,7 @@ import {
     updateCupAdmin,
     updateCupStatus,
 } from './db/cups.js';
+import { areFriends, listAcceptedFriendIds } from './db/friends.js';
 import {
     CUP_MAX,
     CUP_MIN_START,
@@ -30,6 +31,15 @@ import {
     placeWinner,
     readyMatchIds,
 } from './cupBracket.js';
+import {
+    bindSessionSocket,
+    broadcastUserCount,
+    clearSocketPresence,
+    getSocketIdForUser,
+    isUserOnline,
+    markUserOnline,
+    setPresenceChangeHandler,
+} from './presence.js';
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -57,7 +67,6 @@ const OFFLINE_MISS_LIMIT = 2;
 const TURN_MS = 60_000;
 /** @type {Map<string, NodeJS.Timeout>} */
 const turnExpiryTimers = new Map();
-let userCounter = 0;
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -922,6 +931,10 @@ async function finishGame(code, winnerKey) {
             winnerKey: snapshot.winnerKey,
             playerOneHistory: snapshot.playerOneHistory,
             playerTwoHistory: snapshot.playerTwoHistory,
+            playerOneSecret: room.playerOne?.answer || null,
+            playerTwoSecret: room.playerTwo?.answer || null,
+            playerOneName: room.playerOne?.displayName || null,
+            playerTwoName: room.playerTwo?.displayName || null,
         });
         // PvP: push Elo update after DB (optional refresh for clients still on overlay)
         if (eloInfo && snapshot.mode === 'pvp') {
@@ -1097,15 +1110,32 @@ app.get('/', (req, res) => {
     res.sendFile(join(__dirname, '/frontend/index.html'));
 });
 
+setPresenceChangeHandler((userId, online) => {
+    void (async () => {
+        if (!isDbConfigured() || !userId) return;
+        try {
+            const friendIds = await listAcceptedFriendIds(userId);
+            for (const friendId of friendIds) {
+                const sid = getSocketIdForUser(friendId);
+                if (sid) {
+                    io.to(sid).emit('friendsPresence', { userId, online });
+                }
+            }
+        } catch (err) {
+            console.warn('[presence] notify friends:', err.message);
+        }
+    })();
+});
+
 io.on('connection', (socket) => {
-    userCounter += 1;
-    io.emit('usercount', userCounter);
+    broadcastUserCount(io);
 
     // Register handlers first — do not await before this or early client
     // emits (sessionHello / createRoom) are dropped.
     void (async () => {
         socket.data.user = await userFromSocket(socket);
         if (socket.data.user) {
+            markUserOnline(socket.data.user.id, socket.id);
             socket.emit('authed', {
                 id: socket.data.user.id,
                 display_name: socket.data.user.display_name,
@@ -1487,6 +1517,11 @@ io.on('connection', (socket) => {
             return;
         }
 
+        bindSessionSocket(sessionId, socket.id);
+        if (socket.data?.user?.id) {
+            markUserOnline(socket.data.user.id, socket.id);
+        }
+
         let cupFound = findCupBySessionId(sessionId);
         if (!cupFound) {
             cupFound = await restoreOpenCupToMemory({
@@ -1807,9 +1842,188 @@ io.on('connection', (socket) => {
         socket.emit('cupSpectateStart', cupMatchSnapshot(cup, match, room));
     });
 
+    // ——— Friend play invite ———
+
+    socket.on('friendPlayInvite', async (msg = {}) => {
+        if (!requireSession(socket, msg.sessionId)) return;
+        if (!requireSocketUser(socket)) return;
+
+        const friendUserId = String(msg.userId || '').trim();
+        if (!friendUserId) {
+            emitError(socket, 'Pick a friend to invite');
+            return;
+        }
+
+        try {
+            if (!(await areFriends(socket.data.user.id, friendUserId))) {
+                socket.emit('friendPlayInviteResult', {
+                    ok: false,
+                    reason: 'not_friends',
+                    message: 'You can only invite accepted friends',
+                });
+                return;
+            }
+        } catch (err) {
+            console.warn('[friends] invite check:', err.message);
+            emitError(socket, 'Could not invite right now');
+            return;
+        }
+
+        if (!isUserOnline(friendUserId)) {
+            socket.emit('friendPlayInviteResult', {
+                ok: false,
+                reason: 'offline',
+                message: 'Not online — ask them to open ATP',
+            });
+            return;
+        }
+
+        const friendSocketId = getSocketIdForUser(friendUserId);
+        const friendSocket = friendSocketId
+            ? io.sockets.sockets.get(friendSocketId)
+            : null;
+        if (!friendSocket?.data?.sessionId) {
+            socket.emit('friendPlayInviteResult', {
+                ok: false,
+                reason: 'offline',
+                message: 'Not online — ask them to open ATP',
+            });
+            return;
+        }
+
+        await restoreOpenCupToMemory({
+            userId: socket.data.user.id,
+            sessionId: socket.data.sessionId,
+        });
+        await restoreOpenCupToMemory({
+            userId: friendUserId,
+            sessionId: friendSocket.data.sessionId,
+        });
+
+        if (
+            isSocketBusy(socket.id, socket.data.sessionId) ||
+            findRoomBySocketId(socket.id) ||
+            findRoomBySessionId(socket.data.sessionId)
+        ) {
+            socket.emit('friendPlayInviteResult', {
+                ok: false,
+                reason: 'self_busy',
+                message: 'Leave your current game or cup first',
+            });
+            return;
+        }
+
+        if (
+            isSocketBusy(friendSocket.id, friendSocket.data.sessionId) ||
+            findRoomBySocketId(friendSocket.id) ||
+            findRoomBySessionId(friendSocket.data.sessionId)
+        ) {
+            socket.emit('friendPlayInviteResult', {
+                ok: false,
+                reason: 'busy',
+                message: 'In a game or cup right now',
+            });
+            return;
+        }
+
+        const code = generateRoomCode();
+        rooms[code] = {
+            code,
+            vsAI: false,
+            playerOne: seatFromSocket(socket),
+            playerTwo: null,
+            status: 'waiting',
+            friendInvite: {
+                toUserId: friendUserId,
+                fromUserId: socket.data.user.id,
+            },
+        };
+
+        socket.emit('roomCreated', {
+            roomId: code,
+            playerName: 'Player One',
+        });
+        socket.emit('statusMessage', {
+            message: `Invite sent — waiting in room ${code}`,
+            type: 'info',
+        });
+        socket.emit('friendPlayInviteResult', {
+            ok: true,
+            roomId: code,
+            message: 'Invite sent…',
+        });
+
+        friendSocket.emit('friendPlayInvite', {
+            roomId: code,
+            fromUserId: socket.data.user.id,
+            fromName:
+                socket.data.user.display_name ||
+                identityFromSocket(socket).displayName,
+        });
+    });
+
+    socket.on('friendPlayRespond', async (msg = {}) => {
+        if (!requireSession(socket, msg.sessionId)) return;
+        const roomId = String(msg.roomId || '')
+            .trim()
+            .toUpperCase();
+        const accept = Boolean(msg.accept);
+        const room = rooms[roomId];
+
+        if (!accept) {
+            if (room?.playerOne?.id) {
+                io.to(room.playerOne.id).emit('friendPlayInviteResult', {
+                    ok: false,
+                    reason: 'declined',
+                    message: 'Friend declined the invite',
+                    roomId,
+                });
+                io.to(room.playerOne.id).emit('statusMessage', {
+                    message: 'Friend declined — room closed',
+                    type: 'info',
+                });
+            }
+            if (room && room.status === 'waiting' && !room.playerTwo) {
+                delete rooms[roomId];
+            }
+            return;
+        }
+
+        if (!room || room.status !== 'waiting' || room.playerTwo) {
+            emitError(socket, 'Invite expired');
+            return;
+        }
+
+        if (
+            findRoomBySocketId(socket.id) ||
+            findRoomBySessionId(socket.data.sessionId) ||
+            findBlockingCupBySocketId(socket.id) ||
+            findBlockingCupBySessionId(socket.data.sessionId)
+        ) {
+            emitError(socket, 'Leave your current game or cup first');
+            return;
+        }
+
+        room.playerTwo = seatFromSocket(socket);
+        room.status = 'ready';
+
+        socket.emit('roomJoined', {
+            roomId,
+            playerName: 'Player Two',
+        });
+        emitToPlayer(room.playerOne, 'opponentJoined', {
+            roomId,
+            message: 'Friend joined — set your secret number',
+        });
+        socket.emit('statusMessage', {
+            message: 'Joined — set your secret number',
+            type: 'info',
+        });
+    });
+
     socket.on('disconnect', () => {
-        userCounter = Math.max(0, userCounter - 1);
-        io.emit('usercount', userCounter);
+        clearSocketPresence(socket.id);
+        broadcastUserCount(io);
 
         const partnerInfo = socket.data.rematchPartner;
         if (partnerInfo?.socketId) {

@@ -99,6 +99,10 @@
                     class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
                     Cups
                 </button>
+                <button type="button" id="nav-friends"
+                    class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
+                    Friends
+                </button>
                 <button type="button" id="nav-history"
                     class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
                     History
@@ -277,19 +281,80 @@
                 </div>
             </section>
 
-            <!-- HISTORY -->
-            <section id="screen-history" class="screen screen-history hide">
+            <!-- FRIENDS -->
+            <section id="screen-friends" class="screen screen-friends hide">
                 <div
                     class="w-full max-w-lg mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-6 sm:p-8 text-left">
-                    <h2 class="text-xl font-semibold m-0 mb-1">Match history</h2>
-                    <p class="text-sm text-muted m-0 mb-4">Recent games and Elo changes</p>
-                    <div id="history-list" class="history-list"></div>
-                    <button type="button" id="btn-history-back"
+                    <h2 class="text-xl font-semibold m-0 mb-1">Friends</h2>
+                    <p class="text-sm text-muted m-0 mb-4">Add friends and see who’s online</p>
+
+                    <div class="join-row grid grid-cols-[1fr_auto] gap-2 mb-4">
+                        <input type="text" id="friends-search-input"
+                            class="field-input w-full rounded-xl border-2 border-[#d5d8d0] dark:border-white/20 focus:border-green-main outline-none px-3.5 py-3 bg-white dark:bg-[#12151a] dark:text-[#e8ece4]"
+                            placeholder="Search username or name" maxlength="40" autocomplete="off">
+                        <button type="button" id="btn-friends-search"
+                            class="rounded-xl px-4 py-3 font-medium text-white bg-blue-main hover:bg-blue-hovered transition-colors">
+                            Search
+                        </button>
+                    </div>
+                    <div id="friends-search-results" class="friends-list mb-5"></div>
+
+                    <h3 class="text-sm font-semibold m-0 mb-2 text-muted uppercase tracking-wide">Pending</h3>
+                    <div id="friends-pending" class="friends-list mb-5"></div>
+
+                    <h3 class="text-sm font-semibold m-0 mb-2 text-muted uppercase tracking-wide">Your friends</h3>
+                    <div id="friends-accepted" class="friends-list mb-5"></div>
+
+                    <button type="button" id="btn-friends-back"
                         class="w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors">
                         Back
                     </button>
                 </div>
             </section>
+
+            <!-- HISTORY -->
+            <section id="screen-history" class="screen screen-history hide">
+                <div
+                    class="w-full max-w-lg mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-6 sm:p-8 text-left">
+                    <div id="history-list-panel">
+                        <h2 class="text-xl font-semibold m-0 mb-1">Match history</h2>
+                        <p class="text-sm text-muted m-0 mb-4">Tap a game to review the board</p>
+                        <div id="history-list" class="history-list"></div>
+                    </div>
+                    <div id="history-detail-panel" class="hide">
+                        <h2 class="text-xl font-semibold m-0 mb-1" id="history-detail-title">Game</h2>
+                        <p class="text-sm text-muted m-0 mb-4" id="history-detail-meta"></p>
+                        <div class="history-detail-board game-con" id="history-detail-shell">
+                            <div class="top-half">
+                                <div class="player-one-con player-con">
+                                    <div class="player-one-name-con player-name-con center" id="hist-p1-label">You</div>
+                                    <div class="player-one-n center">N</div>
+                                    <div class="player-one-n center">O</div>
+                                </div>
+                                <div class="player-two-con player-con">
+                                    <div class="player-two-name-con player-name-con center" id="hist-p2-label">Opponent</div>
+                                    <div class="player-two-n center">N</div>
+                                    <div class="player-two-n center">O</div>
+                                </div>
+                            </div>
+                            <div class="bottom-half" id="history-detail-board"></div>
+                        </div>
+                    </div>
+                    <button type="button" id="btn-history-back"
+                        class="w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors mt-4">
+                        Back
+                    </button>
+                </div>
+            </section>
+
+            <!-- Friend play invite bar -->
+            <div id="friend-invite-bar" class="rematch-invite-bar hide" role="dialog" aria-live="polite">
+                <p class="rematch-invite-text" id="friend-invite-text">Friend invite</p>
+                <div class="rematch-invite-actions">
+                    <button type="button" id="btn-friend-invite-accept" class="bottom-btn btn-play-again font-medium">Accept</button>
+                    <button type="button" id="btn-friend-invite-decline" class="bottom-btn btn-end-home font-medium">Decline</button>
+                </div>
+            </div>
 
             <!-- WAITING -->
             <section id="screen-waiting" class="screen screen-waiting hide">

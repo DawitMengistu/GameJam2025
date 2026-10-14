@@ -511,10 +511,122 @@ html.dark .field-input:-webkit-autofill:focus {
 }
 
 .history-row {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
     border-radius: var(--radius-sm);
     padding: 12px 14px;
     background: var(--history-row-bg);
     border: 1px solid rgba(59, 59, 59, 0.1);
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+}
+
+.history-row:hover {
+    border-color: var(--green-main);
+}
+
+.history-detail-board.game-con {
+    height: auto;
+    max-height: min(55vh, 480px);
+    min-height: 280px;
+    box-shadow: none;
+}
+
+.friends-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 8px;
+}
+
+.friends-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--history-row-bg);
+    border: 1px solid rgba(59, 59, 59, 0.1);
+    color: var(--balck-border);
+    font-size: 0.92rem;
+}
+
+html.dark .friends-row {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.friends-row-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.friends-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.friends-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    color: #fff;
+    background: var(--blue-main);
+}
+
+.friends-btn:hover {
+    background: var(--blue-hovered);
+}
+
+.friends-btn.secondary {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid rgba(59, 59, 59, 0.15);
+}
+
+html.dark .friends-btn.secondary {
+    border-color: rgba(255, 255, 255, 0.15);
+    color: #c8cfc4;
+}
+
+.friends-btn.danger {
+    background: var(--red-main);
+}
+
+.friends-btn.play {
+    background: var(--green-main);
+}
+
+.friends-presence {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.friends-presence.is-online {
+    color: var(--green-main);
+}
+
+.friends-presence.is-offline {
+    color: var(--muted);
+}
+
+.friends-empty {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin: 0;
 }
 
 html.dark .history-row {

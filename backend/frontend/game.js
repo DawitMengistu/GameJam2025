@@ -66,6 +66,7 @@
         lobby: document.getElementById('screen-lobby'),
         cups: document.getElementById('screen-cups'),
         cupLobby: document.getElementById('screen-cup-lobby'),
+        friends: document.getElementById('screen-friends'),
         history: document.getElementById('screen-history'),
         waiting: document.getElementById('screen-waiting'),
         secret: document.getElementById('screen-secret'),
@@ -92,8 +93,26 @@
         navBrand: document.getElementById('nav-brand'),
         navPlay: document.getElementById('nav-play'),
         navCups: document.getElementById('nav-cups'),
+        navFriends: document.getElementById('nav-friends'),
         navHistory: document.getElementById('nav-history'),
         btnHistoryBack: document.getElementById('btn-history-back'),
+        historyListPanel: document.getElementById('history-list-panel'),
+        historyDetailPanel: document.getElementById('history-detail-panel'),
+        historyDetailTitle: document.getElementById('history-detail-title'),
+        historyDetailMeta: document.getElementById('history-detail-meta'),
+        historyDetailBoard: document.getElementById('history-detail-board'),
+        histP1Label: document.getElementById('hist-p1-label'),
+        histP2Label: document.getElementById('hist-p2-label'),
+        btnFriendsBack: document.getElementById('btn-friends-back'),
+        friendsSearchInput: document.getElementById('friends-search-input'),
+        btnFriendsSearch: document.getElementById('btn-friends-search'),
+        friendsSearchResults: document.getElementById('friends-search-results'),
+        friendsPending: document.getElementById('friends-pending'),
+        friendsAccepted: document.getElementById('friends-accepted'),
+        friendInviteBar: document.getElementById('friend-invite-bar'),
+        friendInviteText: document.getElementById('friend-invite-text'),
+        btnFriendInviteAccept: document.getElementById('btn-friend-invite-accept'),
+        btnFriendInviteDecline: document.getElementById('btn-friend-invite-decline'),
         btnCupsBack: document.getElementById('btn-cups-back'),
         btnCupCreate: document.getElementById('btn-cup-create'),
         btnCupJoin: document.getElementById('btn-cup-join'),
@@ -178,6 +197,8 @@
         spectating: false,
         spectateMatchId: null,
         spectateRoomId: null,
+        pendingFriendInvite: null,
+        historyDetailId: null,
         opponentName: null,
         lastP1History: [],
         lastP2History: [],
@@ -247,6 +268,7 @@
     function setNavActive(which) {
         els.navPlay?.classList.toggle('nav-link-active', which === 'play');
         els.navCups?.classList.toggle('nav-link-active', which === 'cups');
+        els.navFriends?.classList.toggle('nav-link-active', which === 'friends');
         els.navHistory?.classList.toggle('nav-link-active', which === 'history');
     }
 
@@ -256,6 +278,7 @@
             el?.classList.toggle('hide', key !== name);
         });
         if (name === 'history') setNavActive('history');
+        else if (name === 'friends') setNavActive('friends');
         else if (name === 'cups' || name === 'cupLobby') setNavActive('cups');
         else setNavActive('play');
         persistPlayState();
@@ -725,7 +748,12 @@
     }
 
     function goNavPlay() {
-        if (state.screen === 'history' || state.screen === 'cups' || state.screen === 'cupLobby') {
+        if (
+            state.screen === 'history' ||
+            state.screen === 'friends' ||
+            state.screen === 'cups' ||
+            state.screen === 'cupLobby'
+        ) {
             if (inCupLobby() && state.cupStatus === 'lobby') {
                 showToast('Leave the cup first, or stay on Cups', 'info');
                 return;
@@ -760,6 +788,18 @@
             return;
         }
         openHistory();
+    }
+
+    function goNavFriends() {
+        if (inLivePlay()) {
+            showToast('Finish the current game first', 'info');
+            return;
+        }
+        if (inCupLobby() && state.cupStatus === 'lobby') {
+            showToast('Leave the cup lobby first', 'info');
+            return;
+        }
+        openFriends();
     }
 
     function playEndSound(didWin) {
@@ -1351,10 +1391,276 @@
         }
     }
 
-    function requireAuth() {
+    function requireAuth(message = 'Log in with Telegram first') {
         if (state.user) return true;
-        showToast('Log in with Telegram to view match history', 'info');
+        showToast(message, 'info');
         return false;
+    }
+
+    function presenceLabel(online) {
+        return online
+            ? '<span class="friends-presence is-online">Online</span>'
+            : '<span class="friends-presence is-offline">Offline</span>';
+    }
+
+    function friendDisplayName(friend) {
+        if (!friend) return 'Player';
+        if (friend.username) return `@${friend.username}`;
+        return friend.display_name || 'Player';
+    }
+
+    async function openFriends() {
+        if (!requireAuth('Log in with Telegram to use Friends')) return;
+        showScreen('friends');
+        await refreshFriendsLists();
+    }
+
+    async function refreshFriendsLists() {
+        if (!els.friendsAccepted || !els.friendsPending) return;
+        els.friendsPending.innerHTML =
+            '<p class="friends-empty">Loading…</p>';
+        els.friendsAccepted.innerHTML =
+            '<p class="friends-empty">Loading…</p>';
+        try {
+            const res = await fetch('/api/friends', { credentials: 'include' });
+            const data = await res.json();
+            if (!res.ok) {
+                els.friendsPending.innerHTML = `<p class="friends-empty">${
+                    data.error || 'Failed'
+                }</p>`;
+                els.friendsAccepted.innerHTML = '';
+                return;
+            }
+            renderFriendsPending(data);
+            renderFriendsAccepted(data.accepted || []);
+        } catch {
+            els.friendsPending.innerHTML =
+                '<p class="friends-empty">Network error</p>';
+            els.friendsAccepted.innerHTML = '';
+        }
+    }
+
+    function renderFriendsPending(data) {
+        const incoming = data.pendingIn || [];
+        const outgoing = data.pendingOut || [];
+        if (!incoming.length && !outgoing.length) {
+            els.friendsPending.innerHTML =
+                '<p class="friends-empty">No pending requests</p>';
+            return;
+        }
+        const parts = [];
+        for (const item of incoming) {
+            parts.push(`<div class="friends-row" data-friendship-id="${escapeHtml(
+                item.id
+            )}">
+                <div class="friends-row-main">
+                    <span class="font-medium truncate">${escapeHtml(
+                        friendDisplayName(item.friend)
+                    )}</span>
+                    <span class="text-sm text-muted">Wants to be friends</span>
+                </div>
+                <div class="friends-row-actions">
+                    <button type="button" class="friends-btn" data-friend-accept="${escapeHtml(
+                        item.id
+                    )}">Accept</button>
+                    <button type="button" class="friends-btn secondary" data-friend-decline="${escapeHtml(
+                        item.id
+                    )}">Decline</button>
+                </div>
+            </div>`);
+        }
+        for (const item of outgoing) {
+            parts.push(`<div class="friends-row">
+                <div class="friends-row-main">
+                    <span class="font-medium truncate">${escapeHtml(
+                        friendDisplayName(item.friend)
+                    )}</span>
+                    <span class="text-sm text-muted">Request sent</span>
+                </div>
+                <div class="friends-row-actions">
+                    <button type="button" class="friends-btn secondary" data-friend-cancel="${escapeHtml(
+                        item.id
+                    )}">Cancel</button>
+                </div>
+            </div>`);
+        }
+        els.friendsPending.innerHTML = parts.join('');
+    }
+
+    function renderFriendsAccepted(list) {
+        if (!list.length) {
+            els.friendsAccepted.innerHTML =
+                '<p class="friends-empty">No friends yet — search above</p>';
+            return;
+        }
+        els.friendsAccepted.innerHTML = list
+            .map((item) => {
+                const fid = item.friend?.id || '';
+                return `<div class="friends-row" data-friend-user-id="${escapeHtml(
+                    fid
+                )}">
+                <div class="friends-row-main">
+                    <span class="font-medium truncate">${escapeHtml(
+                        friendDisplayName(item.friend)
+                    )}</span>
+                    ${presenceLabel(item.online)}
+                </div>
+                <div class="friends-row-actions">
+                    <button type="button" class="friends-btn play" data-friend-invite="${escapeHtml(
+                        fid
+                    )}">Invite</button>
+                    <button type="button" class="friends-btn secondary" data-friend-remove="${escapeHtml(
+                        item.id
+                    )}">Remove</button>
+                </div>
+            </div>`;
+            })
+            .join('');
+    }
+
+    async function searchFriends() {
+        const q = (els.friendsSearchInput?.value || '').trim();
+        if (q.length < 2) {
+            showToast('Type at least 2 characters', 'info');
+            return;
+        }
+        els.friendsSearchResults.innerHTML =
+            '<p class="friends-empty">Searching…</p>';
+        try {
+            const res = await fetch(
+                `/api/friends/search?q=${encodeURIComponent(q)}`,
+                { credentials: 'include' }
+            );
+            const data = await res.json();
+            if (!res.ok) {
+                els.friendsSearchResults.innerHTML = `<p class="friends-empty">${
+                    data.error || 'Failed'
+                }</p>`;
+                return;
+            }
+            if (!data.users?.length) {
+                els.friendsSearchResults.innerHTML =
+                    '<p class="friends-empty">No users found</p>';
+                return;
+            }
+            els.friendsSearchResults.innerHTML = data.users
+                .map(
+                    (u) => `<div class="friends-row">
+                <div class="friends-row-main">
+                    <span class="font-medium truncate">${escapeHtml(
+                        friendDisplayName(u)
+                    )}</span>
+                    ${presenceLabel(u.online)}
+                </div>
+                <div class="friends-row-actions">
+                    <button type="button" class="friends-btn" data-friend-add="${escapeHtml(
+                        u.id
+                    )}">Add</button>
+                </div>
+            </div>`
+                )
+                .join('');
+        } catch {
+            els.friendsSearchResults.innerHTML =
+                '<p class="friends-empty">Network error</p>';
+        }
+    }
+
+    function hideFriendInviteBar() {
+        state.pendingFriendInvite = null;
+        els.friendInviteBar?.classList.add('hide');
+    }
+
+    function showFriendInviteBar(invite) {
+        state.pendingFriendInvite = invite;
+        if (els.friendInviteText) {
+            els.friendInviteText.textContent = `${
+                invite.fromName || 'A friend'
+            } invited you to play`;
+        }
+        els.friendInviteBar?.classList.remove('hide');
+    }
+
+    function showHistoryList() {
+        state.historyDetailId = null;
+        els.historyListPanel?.classList.remove('hide');
+        els.historyDetailPanel?.classList.add('hide');
+        if (els.btnHistoryBack) els.btnHistoryBack.textContent = 'Back';
+    }
+
+    function renderHistoryDetailBoard(detail) {
+        const board = els.historyDetailBoard;
+        if (!board) return;
+        state.highlightGuesses = Boolean(
+            detail.playerOneSecret || detail.playerTwoSecret
+        );
+        state.reviewP1Secret = detail.playerOneSecret || null;
+        state.reviewP2Secret = detail.playerTwoSecret || null;
+        state.lastP1History = detail.playerOneHistory || [];
+        state.lastP2History = detail.playerTwoHistory || [];
+
+        if (els.histP1Label) {
+            els.histP1Label.textContent = detail.playerOneName || 'You';
+        }
+        if (els.histP2Label) {
+            els.histP2Label.textContent = detail.playerTwoName || 'Opponent';
+        }
+
+        const leftHist = state.lastP1History;
+        const rightHist = state.lastP2History;
+        const leftTarget = state.reviewP2Secret;
+        const rightTarget = state.reviewP1Secret;
+        const maxRounds = Math.max(leftHist.length, rightHist.length);
+        let html = '';
+        for (let i = 0; i < maxRounds; i++) {
+            html += singleRound(
+                leftHist[i] || [],
+                rightHist[i] || [],
+                leftTarget,
+                rightTarget
+            );
+        }
+        board.innerHTML = html || '<p class="friends-empty">No moves recorded</p>';
+    }
+
+    async function openHistoryDetail(id) {
+        if (!id) return;
+        try {
+            const res = await fetch(`/api/history/${encodeURIComponent(id)}`, {
+                credentials: 'include',
+            });
+            const data = await res.json();
+            if (!res.ok || !data.game) {
+                showToast(data.error || 'Could not open game', 'error');
+                return;
+            }
+            const g = data.game;
+            state.historyDetailId = id;
+            els.historyListPanel?.classList.add('hide');
+            els.historyDetailPanel?.classList.remove('hide');
+            if (els.historyDetailTitle) {
+                els.historyDetailTitle.textContent =
+                    g.result_label || 'Game review';
+            }
+            if (els.historyDetailMeta) {
+                const when = g.finished_at
+                    ? new Date(g.finished_at).toLocaleString()
+                    : '';
+                const kind =
+                    g.kind === 'cup'
+                        ? `Cup ${g.cup_code || ''}`.trim()
+                        : g.mode === 'ai'
+                          ? 'vs AI'
+                          : 'PvP';
+                els.historyDetailMeta.textContent = `${kind} · vs ${
+                    g.opponent || 'Opponent'
+                }${when ? ` · ${when}` : ''}`;
+            }
+            if (els.btnHistoryBack) els.btnHistoryBack.textContent = 'Back to list';
+            renderHistoryDetailBoard(g);
+        } catch {
+            showToast('Network error', 'error');
+        }
     }
 
     async function loadConfigAndMe() {
@@ -1393,14 +1699,18 @@
     }
 
     async function openHistory() {
-        if (!requireAuth()) return;
-        els.historyList.innerHTML = '<p class="status-line poppins-regular">Loading…</p>';
+        if (!requireAuth('Log in with Telegram to view match history')) return;
+        showHistoryList();
+        els.historyList.innerHTML =
+            '<p class="status-line poppins-regular">Loading…</p>';
         showScreen('history');
         try {
             const res = await fetch('/api/history', { credentials: 'include' });
             const data = await res.json();
             if (!res.ok) {
-                els.historyList.innerHTML = `<p class="status-line">${data.error || 'Failed'}</p>`;
+                els.historyList.innerHTML = `<p class="status-line">${
+                    data.error || 'Failed'
+                }</p>`;
                 return;
             }
             if (!data.games?.length) {
@@ -1411,36 +1721,63 @@
             els.historyList.innerHTML = data.games
                 .map((g) => {
                     const delta =
-                        g.elo_delta === 0
-                            ? '—'
-                            : g.elo_delta > 0
-                              ? `+${g.elo_delta}`
-                              : String(g.elo_delta);
+                        g.kind === 'cup'
+                            ? 'Cup'
+                            : g.elo_delta === 0
+                              ? '—'
+                              : g.elo_delta > 0
+                                ? `+${g.elo_delta}`
+                                : String(g.elo_delta);
                     const resultClass =
                         g.result === 'win'
                             ? 'hist-win'
                             : g.result === 'loss'
                               ? 'hist-loss'
                               : '';
-                    const label = g.result_label || (g.result === 'win' ? 'You won' : g.result === 'loss' ? 'You lost' : 'Unknown');
+                    const label =
+                        g.result_label ||
+                        (g.result === 'win'
+                            ? 'You won'
+                            : g.result === 'loss'
+                              ? 'You lost'
+                              : 'Unknown');
                     const when = g.finished_at
                         ? new Date(g.finished_at).toLocaleString()
                         : '';
-                    return `<div class="history-row ${resultClass}">
+                    const modeLabel =
+                        g.kind === 'cup'
+                            ? 'Cup'
+                            : g.mode === 'ai'
+                              ? 'AI'
+                              : 'PvP';
+                    return `<button type="button" class="history-row ${resultClass}" data-history-id="${escapeHtml(
+                        g.id
+                    )}">
                         <div class="history-row-main">
-                            <span class="poppins-semibold">${label}</span>
-                            <span class="poppins-regular">vs ${g.opponent}${g.opponent_elo != null ? ` (${g.opponent_elo})` : ''}</span>
+                            <span class="poppins-semibold">${escapeHtml(
+                                label
+                            )}</span>
+                            <span class="poppins-regular">vs ${escapeHtml(
+                                g.opponent || 'Opponent'
+                            )}${
+                                g.opponent_elo != null
+                                    ? ` (${g.opponent_elo})`
+                                    : ''
+                            }</span>
                         </div>
                         <div class="history-row-meta poppins-regular">
-                            <span>${g.mode === 'ai' ? 'AI' : 'PvP'}</span>
-                            <span class="elo-delta">${delta} Elo</span>
-                            <span>${when}</span>
+                            <span>${modeLabel}</span>
+                            <span class="elo-delta">${escapeHtml(
+                                String(delta)
+                            )}${g.kind === 'cup' ? '' : ' Elo'}</span>
+                            <span>${escapeHtml(when)}</span>
                         </div>
-                    </div>`;
+                    </button>`;
                 })
                 .join('');
         } catch {
-            els.historyList.innerHTML = '<p class="status-line">Network error</p>';
+            els.historyList.innerHTML =
+                '<p class="status-line">Network error</p>';
         }
     }
 
@@ -1466,7 +1803,124 @@
         socket.emit('joinRoom', { code, sessionId });
     });
 
-    els.btnHistoryBack?.addEventListener('click', () => showScreen('lobby'));
+    els.btnHistoryBack?.addEventListener('click', () => {
+        if (state.historyDetailId) {
+            showHistoryList();
+            openHistory();
+            return;
+        }
+        showScreen('lobby');
+    });
+    els.historyList?.addEventListener('click', (e) => {
+        const row = e.target.closest('[data-history-id]');
+        if (!row) return;
+        openHistoryDetail(row.getAttribute('data-history-id'));
+    });
+    els.btnFriendsBack?.addEventListener('click', () => showScreen('lobby'));
+    els.btnFriendsSearch?.addEventListener('click', () => searchFriends());
+    els.friendsSearchInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') searchFriends();
+    });
+    const friendsClickRoot = document.getElementById('screen-friends');
+    friendsClickRoot?.addEventListener('click', async (e) => {
+        const add = e.target.closest('[data-friend-add]');
+        if (add) {
+            const userId = add.getAttribute('data-friend-add');
+            const res = await fetch('/api/friends/request', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                showToast(data.error || 'Could not send request', 'error');
+                return;
+            }
+            showToast('Friend request sent', 'info');
+            els.friendsSearchResults.innerHTML = '';
+            await refreshFriendsLists();
+            return;
+        }
+        const accept = e.target.closest('[data-friend-accept]');
+        if (accept) {
+            const friendshipId = accept.getAttribute('data-friend-accept');
+            const res = await fetch('/api/friends/respond', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ friendshipId, accept: true }),
+            });
+            const data = await res.json();
+            if (!res.ok) showToast(data.error || 'Failed', 'error');
+            else showToast('Friend added', 'info');
+            await refreshFriendsLists();
+            return;
+        }
+        const decline = e.target.closest('[data-friend-decline]');
+        if (decline) {
+            const friendshipId = decline.getAttribute('data-friend-decline');
+            await fetch('/api/friends/respond', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ friendshipId, accept: false }),
+            });
+            await refreshFriendsLists();
+            return;
+        }
+        const cancel = e.target.closest('[data-friend-cancel]');
+        if (cancel) {
+            const id = cancel.getAttribute('data-friend-cancel');
+            await fetch(`/api/friends/${encodeURIComponent(id)}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            await refreshFriendsLists();
+            return;
+        }
+        const remove = e.target.closest('[data-friend-remove]');
+        if (remove) {
+            const id = remove.getAttribute('data-friend-remove');
+            await fetch(`/api/friends/${encodeURIComponent(id)}`, {
+                method: 'DELETE',
+                credentials: 'include',
+            });
+            showToast('Removed', 'info');
+            await refreshFriendsLists();
+            return;
+        }
+        const invite = e.target.closest('[data-friend-invite]');
+        if (invite) {
+            const userId = invite.getAttribute('data-friend-invite');
+            if (!userId) return;
+            if (inLivePlay() || inSetupMatch() || state.cupId) {
+                showToast('Leave your current game or cup first', 'info');
+                return;
+            }
+            socket.emit('friendPlayInvite', { userId, sessionId });
+        }
+    });
+    els.btnFriendInviteAccept?.addEventListener('click', () => {
+        const invite = state.pendingFriendInvite;
+        if (!invite?.roomId) return;
+        hideFriendInviteBar();
+        socket.emit('friendPlayRespond', {
+            roomId: invite.roomId,
+            accept: true,
+            sessionId,
+        });
+    });
+    els.btnFriendInviteDecline?.addEventListener('click', () => {
+        const invite = state.pendingFriendInvite;
+        hideFriendInviteBar();
+        if (!invite?.roomId) return;
+        socket.emit('friendPlayRespond', {
+            roomId: invite.roomId,
+            accept: false,
+            sessionId,
+        });
+    });
     els.btnCupsBack?.addEventListener('click', () => {
         if (state.cupId) {
             showToast('Leave the cup first', 'info');
@@ -1511,6 +1965,7 @@
     els.btnSpectateBack?.addEventListener('click', () => exitSpectate());
     els.navPlay?.addEventListener('click', () => goNavPlay());
     els.navCups?.addEventListener('click', () => goNavCups());
+    els.navFriends?.addEventListener('click', () => goNavFriends());
     els.navHistory?.addEventListener('click', () => goNavHistory());
     els.navBrand?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -1974,6 +2429,41 @@
 
     socket.on('usercount', (count) => {
         syncUserCount(count);
+    });
+
+    socket.on('friendsPresence', (msg) => {
+        if (!msg?.userId || state.screen !== 'friends') return;
+        const row = els.friendsAccepted?.querySelector(
+            `[data-friend-user-id="${msg.userId}"]`
+        );
+        if (!row) return;
+        const chip = row.querySelector('.friends-presence');
+        if (!chip) return;
+        chip.classList.toggle('is-online', Boolean(msg.online));
+        chip.classList.toggle('is-offline', !msg.online);
+        chip.textContent = msg.online ? 'Online' : 'Offline';
+    });
+
+    socket.on('friendPlayInvite', (msg) => {
+        if (!msg?.roomId) return;
+        showFriendInviteBar(msg);
+        showToast(
+            `${msg.fromName || 'A friend'} invited you to play`,
+            'info'
+        );
+    });
+
+    socket.on('friendPlayInviteResult', (msg) => {
+        if (!msg) return;
+        if (msg.ok) {
+            showToast(msg.message || 'Invite sent…', 'info');
+            return;
+        }
+        showToast(msg.message || 'Could not invite', 'error');
+        if (msg.reason === 'declined' && msg.roomId && state.roomId === msg.roomId) {
+            state.intentionalLeave = true;
+            resetToLobby({ message: 'Friend declined', type: 'info' });
+        }
     });
 
     socket.on('chatMessage', (msg) => {
