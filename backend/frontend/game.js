@@ -219,13 +219,9 @@
     let myTurnEndsAt = 0;
     let resultPopupTimer = null;
     const TURN_MS_CLIENT = 60_000;
-    const DIGIT_STATES = ['default', 'in', 'out'];
+    const DIGIT_STATES = ['default', 'out', 'in', 'maybe'];
     const digitNotes = Object.fromEntries(
         Array.from({ length: 9 }, (_, i) => [String(i + 1), 'default'])
-    );
-    /** Known position index 0–3 per digit, or null if unset */
-    const digitPositions = Object.fromEntries(
-        Array.from({ length: 9 }, (_, i) => [String(i + 1), null])
     );
 
     function validateNumber(input) {
@@ -871,68 +867,23 @@
         els.digitTracker.innerHTML = '';
         for (let i = 1; i <= 9; i++) {
             const digit = String(i);
-            const row = document.createElement('div');
-            row.className = 'digit-row';
-            row.dataset.digit = digit;
-
-            const slots = document.createElement('div');
-            slots.className = 'digit-pos-slots';
-            slots.setAttribute('role', 'group');
-            slots.setAttribute('aria-label', `Position for ${digit}`);
-            for (let p = 0; p < 4; p++) {
-                const slot = document.createElement('button');
-                slot.type = 'button';
-                slot.className = 'digit-pos';
-                slot.dataset.digit = digit;
-                slot.dataset.pos = String(p);
-                slot.setAttribute('aria-label', `Mark ${digit} in position ${p + 1}`);
-                slot.setAttribute('aria-pressed', 'false');
-                slots.appendChild(slot);
-            }
-
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'digit-chip';
             chip.dataset.digit = digit;
             chip.textContent = digit;
-
-            row.appendChild(slots);
-            row.appendChild(chip);
-            els.digitTracker.appendChild(row);
+            els.digitTracker.appendChild(chip);
         }
-    }
-
-    function syncDigitPosSlots(digit) {
-        const pos = digitPositions[digit];
-        els.digitTracker
-            ?.querySelectorAll(`.digit-pos[data-digit="${digit}"]`)
-            .forEach((slot) => {
-                const on = pos != null && Number(slot.dataset.pos) === pos;
-                slot.classList.toggle('is-on', on);
-                slot.setAttribute('aria-pressed', on ? 'true' : 'false');
-            });
-    }
-
-    function toggleDigitPosition(digit, pos) {
-        if (!digit || digitPositions[digit] === undefined) return;
-        const next = digitPositions[digit] === pos ? null : pos;
-        digitPositions[digit] = next;
-        syncDigitPosSlots(digit);
     }
 
     function resetDigitTracker() {
         for (const d of Object.keys(digitNotes)) digitNotes[d] = 'default';
-        for (const d of Object.keys(digitPositions)) digitPositions[d] = null;
-        if (!els.digitTracker?.querySelector('.digit-row')) {
+        if (!els.digitTracker?.querySelector('.digit-chip')) {
             buildDigitTracker();
             return;
         }
         els.digitTracker.querySelectorAll('.digit-chip').forEach((btn) => {
-            btn.classList.remove('state-in', 'state-out');
-        });
-        els.digitTracker.querySelectorAll('.digit-pos').forEach((slot) => {
-            slot.classList.remove('is-on');
-            slot.setAttribute('aria-pressed', 'false');
+            btn.classList.remove('state-in', 'state-out', 'state-maybe');
         });
     }
 
@@ -942,8 +893,9 @@
         const idx = DIGIT_STATES.indexOf(digitNotes[digit]);
         const next = DIGIT_STATES[(idx + 1) % DIGIT_STATES.length];
         digitNotes[digit] = next;
-        btn.classList.toggle('state-in', next === 'in');
         btn.classList.toggle('state-out', next === 'out');
+        btn.classList.toggle('state-in', next === 'in');
+        btn.classList.toggle('state-maybe', next === 'maybe');
     }
 
     function escapeChatHtml(s) {
@@ -2143,11 +2095,6 @@
 
     els.digitTracker?.addEventListener('click', (e) => {
         if (state.spectating) return;
-        const posBtn = e.target.closest('.digit-pos');
-        if (posBtn && els.digitTracker.contains(posBtn)) {
-            toggleDigitPosition(posBtn.dataset.digit, Number(posBtn.dataset.pos));
-            return;
-        }
         const chip = e.target.closest('.digit-chip');
         if (chip && els.digitTracker.contains(chip)) cycleDigitChip(chip);
     });
