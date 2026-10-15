@@ -98,11 +98,40 @@ export async function searchUsers(userId, query, limit = 12) {
     `;
 }
 
+const RUTH_ONLY_FRIEND_USERNAME = 'ruth_abiti';
+const RUTH_ALLOWED_FRIEND_USERNAME = 'dawitmengistu';
+const RUTH_ONLY_FRIEND_MESSAGE = 'Dawit is your only friend';
+
+function normalizeUsername(value) {
+    return String(value || '')
+        .trim()
+        .replace(/^@/, '')
+        .toLowerCase();
+}
+
 export async function createFriendRequest(requesterId, addresseeId) {
     if (!requesterId || !addresseeId || requesterId === addresseeId) {
         return { ok: false, reason: 'Invalid request' };
     }
     const sql = requireSql();
+
+    const users = await sql`
+        SELECT id, username
+        FROM users
+        WHERE id IN (${requesterId}, ${addresseeId})
+    `;
+    const byId = new Map(users.map((u) => [String(u.id), u]));
+    const requester = byId.get(String(requesterId));
+    const addressee = byId.get(String(addresseeId));
+    if (!requester || !addressee) {
+        return { ok: false, reason: 'User not found' };
+    }
+    if (
+        normalizeUsername(requester.username) === RUTH_ONLY_FRIEND_USERNAME &&
+        normalizeUsername(addressee.username) !== RUTH_ALLOWED_FRIEND_USERNAME
+    ) {
+        return { ok: false, reason: RUTH_ONLY_FRIEND_MESSAGE };
+    }
 
     const existing = await sql`
         SELECT id, status, requester_id, addressee_id
@@ -155,6 +184,23 @@ export async function respondFriendRequest(userId, friendshipId, accept) {
     }
     if (row.status !== 'pending') {
         return { ok: false, reason: 'Request is not pending' };
+    }
+
+    if (accept) {
+        const users = await sql`
+            SELECT id, username
+            FROM users
+            WHERE id IN (${row.addressee_id}, ${row.requester_id})
+        `;
+        const byId = new Map(users.map((u) => [String(u.id), u]));
+        const me = byId.get(String(userId));
+        const other = byId.get(String(row.requester_id));
+        if (
+            normalizeUsername(me?.username) === RUTH_ONLY_FRIEND_USERNAME &&
+            normalizeUsername(other?.username) !== RUTH_ALLOWED_FRIEND_USERNAME
+        ) {
+            return { ok: false, reason: RUTH_ONLY_FRIEND_MESSAGE };
+        }
     }
 
     const status = accept ? 'accepted' : 'declined';
