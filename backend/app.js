@@ -54,6 +54,11 @@ app.get('/auth', (req, res) => {
     res.sendFile(join(__dirname, './frontend/auth.html'));
 });
 
+// Temporary font picker — delete route + frontend/test-font.html when done
+app.get('/test-font', (req, res) => {
+    res.sendFile(join(__dirname, './frontend/test-font.html'));
+});
+
 app.use(express.static(join(__dirname, './frontend')));
 
 const server = createServer(app);

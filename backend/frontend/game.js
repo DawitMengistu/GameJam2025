@@ -1644,7 +1644,7 @@
                     fid
                 )}">
                 <div class="friends-row-main">
-                    <span class="font-medium truncate text-sm">${escapeHtml(
+                    <span class="truncate text-sm">${escapeHtml(
                         friendDisplayName(item.friend)
                     )}</span>
                     ${presenceLabel(item.online)}

@@ -495,9 +495,17 @@ html.dark .auth-spinner {
 
 .nav-friends-peek {
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     min-height: 0;
-    max-height: 28vh;
+    flex: 0 0 auto;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(59, 59, 59, 0.12);
+    opacity: 0.82;
+}
+
+html.dark .nav-friends-peek {
+    border-top-color: rgba(255, 255, 255, 0.1);
 }
 
 .nav-friends-peek.hide {
@@ -505,26 +513,37 @@ html.dark .auth-spinner {
 }
 
 .nav-friends-peek-title {
-    font-size: 0.7rem;
+    font-size: 0.62rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
-    padding: 0 2px;
+    padding: 0 4px;
 }
 
 .nav-friends-peek-list {
+    /* ~4 compact rows visible, then scroll */
+    max-height: 7.5rem;
     overflow-y: auto;
     overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
     min-height: 0;
+    padding-right: 2px;
 }
 
 .nav-friends-peek-list .friends-row {
-    padding: 6px 8px;
-    gap: 6px;
+    padding: 3px 6px;
+    gap: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    box-shadow: none;
+}
+
+.nav-friends-peek-list .friends-row:hover {
+    background: var(--nav-hover);
 }
 
 .nav-friends-peek-list .friends-row-main {
@@ -534,14 +553,24 @@ html.dark .auth-spinner {
     width: 100%;
 }
 
+.nav-friends-peek-list .friends-row-main .font-medium,
+.nav-friends-peek-list .friends-row-main .text-sm {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--muted);
+}
+
 .nav-friends-peek-list .friends-presence {
     flex-shrink: 0;
     margin-left: auto;
+    font-size: 0.58rem;
+    letter-spacing: 0.02em;
 }
 
 .nav-friends-peek-list .friends-empty {
-    font-size: 0.75rem;
+    font-size: 0.68rem;
     padding: 2px 4px;
+    opacity: 0.85;
 }
 
 .waiting-code-row .room-code,
