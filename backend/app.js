@@ -473,7 +473,6 @@ function seatFromCupPlayer(player) {
         userId: player.userId || null,
         displayName: player.displayName,
         elo: player.elo ?? 100,
-        kitNumber: player.kitNumber ?? null,
         answer: null,
         history: [],
         ready: false,
@@ -517,7 +516,6 @@ function createCupMatchRoom(cup, matchId) {
             ...payloadBase,
             playerName: 'Player One',
             opponentName: playerB.displayName,
-            opponentKit: playerB.kitNumber ?? null,
         });
     }
     if (playerB.online !== false && playerB.id) {
@@ -525,7 +523,6 @@ function createCupMatchRoom(cup, matchId) {
             ...payloadBase,
             playerName: 'Player Two',
             opponentName: playerA.displayName,
-            opponentKit: playerA.kitNumber ?? null,
         });
     }
 
@@ -694,21 +691,18 @@ function identityFromSocket(socket) {
             userId: socket.data.user.id,
             displayName: socket.data.user.display_name || 'Player',
             elo: socket.data.user.elo ?? 100,
-            kitNumber: socket.data.user.kit_number ?? null,
         };
     }
     if (!socket.data.guest) {
         socket.data.guest = {
             displayName: `Guest ${String(socket.id).slice(0, 4).toUpperCase()}`,
             elo: 100,
-            kitNumber: null,
         };
     }
     return {
         userId: null,
         displayName: socket.data.guest.displayName,
         elo: socket.data.guest.elo,
-        kitNumber: socket.data.guest.kitNumber ?? null,
     };
 }
 
@@ -720,7 +714,6 @@ function seatFromSocket(socket) {
         userId: id.userId,
         displayName: id.displayName,
         elo: id.elo,
-        kitNumber: id.kitNumber ?? null,
         answer: null,
         history: [],
         ready: false,
@@ -797,7 +790,6 @@ function buildRoomResumePayload(code, room, sessionId) {
         opponentName: room.vsAI
             ? 'AI'
             : room[oppKey]?.displayName || null,
-        opponentKit: room.vsAI ? null : room[oppKey]?.kitNumber ?? null,
         cupId: room.cupId || null,
         cupMatchId: room.cupMatchId || null,
         status: room.status,
@@ -828,13 +820,11 @@ function createPvpRematchRoom(socketA, socketB) {
         roomId: code,
         playerName: 'Player One',
         opponentName: rooms[code].playerTwo?.displayName || 'Opponent',
-        opponentKit: rooms[code].playerTwo?.kitNumber ?? null,
     });
     socketB.emit('rematchStarted', {
         roomId: code,
         playerName: 'Player Two',
         opponentName: rooms[code].playerOne?.displayName || 'Opponent',
-        opponentKit: rooms[code].playerOne?.kitNumber ?? null,
     });
 }
 
@@ -1164,7 +1154,6 @@ io.on('connection', (socket) => {
                 id: socket.data.user.id,
                 display_name: socket.data.user.display_name,
                 elo: socket.data.user.elo,
-                kit_number: socket.data.user.kit_number ?? null,
                 ai_elo: AI_DEFAULT_ELO,
             });
         }
@@ -1234,7 +1223,6 @@ io.on('connection', (socket) => {
                 userId: null,
                 displayName: 'ATP AI',
                 elo: AI_DEFAULT_ELO,
-                kitNumber: null,
                 answer: aiSecret,
                 history: [],
                 ready: true,
@@ -1316,13 +1304,11 @@ io.on('connection', (socket) => {
             roomId: code,
             message: 'Player Two joined — set your secret number',
             opponentName: room.playerTwo.displayName || 'Opponent',
-            opponentKit: room.playerTwo.kitNumber ?? null,
         });
         socket.emit('roomJoined', {
             roomId: code,
             playerName: 'Player Two',
             opponentName: room.playerOne?.displayName || 'Opponent',
-            opponentKit: room.playerOne?.kitNumber ?? null,
         });
         socket.emit('statusMessage', {
             message: 'Joined room — set your secret number',
@@ -1547,7 +1533,7 @@ io.on('connection', (socket) => {
         }
 
         bindSessionSocket(sessionId, socket.id);
-        // Refresh cookie user so profile edits (name / kit) apply mid-session
+        // Refresh cookie user so profile edits (name) apply mid-session
         try {
             const fresh = await userFromSocket(socket);
             if (fresh) socket.data.user = fresh;
@@ -1560,7 +1546,6 @@ io.on('connection', (socket) => {
                 id: socket.data.user.id,
                 display_name: socket.data.user.display_name,
                 elo: socket.data.user.elo,
-                kit_number: socket.data.user.kit_number ?? null,
                 ai_elo: AI_DEFAULT_ELO,
             });
         }
@@ -1670,7 +1655,6 @@ io.on('connection', (socket) => {
                     userId: ident.userId,
                     displayName: ident.displayName,
                     elo: ident.elo,
-                    kitNumber: ident.kitNumber ?? null,
                     online: true,
                 },
             ],
@@ -1757,7 +1741,6 @@ io.on('connection', (socket) => {
             userId: ident.userId,
             displayName: ident.displayName,
             elo: ident.elo,
-            kitNumber: ident.kitNumber ?? null,
             online: true,
         });
 
@@ -2060,13 +2043,11 @@ io.on('connection', (socket) => {
             roomId,
             playerName: 'Player Two',
             opponentName: room.playerOne?.displayName || 'Opponent',
-            opponentKit: room.playerOne?.kitNumber ?? null,
         });
         emitToPlayer(room.playerOne, 'opponentJoined', {
             roomId,
             message: 'Friend joined — set your secret number',
             opponentName: room.playerTwo.displayName || 'Opponent',
-            opponentKit: room.playerTwo.kitNumber ?? null,
         });
         socket.emit('statusMessage', {
             message: 'Joined — set your secret number',

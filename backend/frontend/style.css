@@ -489,56 +489,59 @@ html.dark .auth-spinner {
     flex-shrink: 0;
 }
 
-.lobby-friends {
-    margin-top: 1.25rem;
-    text-align: left;
-    border-top: 1px solid rgba(59, 59, 59, 0.1);
-    padding-top: 1rem;
-}
-
-html.dark .lobby-friends {
-    border-top-color: rgba(255, 255, 255, 0.1);
-}
-
-.lobby-friends.hide {
+.lobby-hero.hide {
     display: none;
 }
 
-.lobby-friends-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 8px;
+.nav-friends-peek {
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+    max-height: 28vh;
 }
 
-.lobby-friends-title {
-    font-size: 0.85rem;
+.nav-friends-peek.hide {
+    display: none !important;
+}
+
+.nav-friends-peek-title {
+    font-size: 0.7rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--balck-border);
+    color: var(--muted);
+    padding: 0 2px;
 }
 
-.lobby-friends-list {
-    max-height: 168px;
+.nav-friends-peek-list {
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding-right: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 0;
 }
 
-.lobby-friends-list .friends-row {
-    padding: 8px 10px;
+.nav-friends-peek-list .friends-row {
+    padding: 6px 8px;
+    gap: 6px;
 }
 
-.lobby-friends-list .friends-row-main {
+.nav-friends-peek-list .friends-row-main {
     flex-direction: row;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    width: 100%;
 }
 
-.lobby-friends-list .friends-presence {
+.nav-friends-peek-list .friends-presence {
     flex-shrink: 0;
+    margin-left: auto;
+}
+
+.nav-friends-peek-list .friends-empty {
+    font-size: 0.75rem;
+    padding: 2px 4px;
 }
 
 .waiting-code-row .room-code,
@@ -1429,80 +1432,18 @@ html.dark .invite-notify-brand {
     cursor: pointer;
 }
 
-.kit-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.85rem;
-    height: 1.85rem;
-    border-radius: 50%;
-    background: var(--green-main);
-    color: #fff;
-    font-size: 0.72rem;
-    font-weight: 700;
-    line-height: 1;
-    flex-shrink: 0;
-    letter-spacing: -0.02em;
+.auth-spinner-sm {
+    width: 16px;
+    height: 16px;
+    border-width: 2px;
 }
 
-.kit-badge-lg {
-    width: 3.25rem;
-    height: 3.25rem;
-    font-size: 1.25rem;
+.btn-profile-save.is-loading .btn-profile-save-label {
+    display: none;
 }
 
-.player-label-text {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.profile-kit-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(2.4rem, 1fr));
-    gap: 6px;
-    max-height: 220px;
-    overflow-y: auto;
-    padding: 4px 2px 8px;
-    overscroll-behavior: contain;
-}
-
-.kit-pick {
-    width: 100%;
-    aspect-ratio: 1;
-    border-radius: 50%;
-    border: 1.5px solid rgba(59, 59, 59, 0.18);
-    background: var(--history-row-bg);
-    color: var(--balck-border);
-    font-size: 0.78rem;
-    font-weight: 700;
-    font-family: inherit;
-    cursor: pointer;
-    line-height: 1;
-    padding: 0;
-}
-
-.kit-pick:hover {
-    border-color: var(--green-main);
-}
-
-.kit-pick.is-selected {
-    background: var(--green-main);
-    border-color: var(--green-main);
-    color: #fff;
-}
-
-html.dark .kit-pick {
-    border-color: rgba(255, 255, 255, 0.18);
-    background: #232933;
-    color: #e8ece4;
-}
-
-html.dark .kit-pick.is-selected {
-    background: var(--green-main);
-    border-color: var(--green-main);
-    color: #fff;
+.btn-profile-save.is-loading .btn-profile-save-loading {
+    display: inline-flex !important;
 }
 
 .player-name-con.secret-reveal {

@@ -92,10 +92,11 @@
         profileNameMobile: document.getElementById('profile-name-mobile'),
         profileEloMobile: document.getElementById('profile-elo-mobile'),
         sessionLoading: document.getElementById('session-loading'),
+        lobbyHero: document.getElementById('lobby-hero'),
         lobbyMe: document.getElementById('lobby-me'),
         lobbyMeName: document.getElementById('lobby-me-name'),
         lobbyMeElo: document.getElementById('lobby-me-elo'),
-        lobbyFriends: document.getElementById('lobby-friends'),
+        navFriendsPeek: document.getElementById('nav-friends-peek'),
         lobbyFriendsList: document.getElementById('lobby-friends-list'),
         authPanel: document.getElementById('auth-panel'),
         playPanel: document.getElementById('play-panel'),
@@ -113,13 +114,9 @@
         navProfile: document.getElementById('nav-profile'),
         btnHistoryBack: document.getElementById('btn-history-back'),
         btnRulesBack: document.getElementById('btn-rules-back'),
-        btnProfileBack: document.getElementById('btn-profile-back'),
         profileGuest: document.getElementById('profile-guest'),
         profileForm: document.getElementById('profile-form'),
         profileDisplayName: document.getElementById('profile-display-name'),
-        profileKitGrid: document.getElementById('profile-kit-grid'),
-        profileKitPreview: document.getElementById('profile-kit-preview'),
-        profileFormNamePreview: document.getElementById('profile-form-name-preview'),
         profileTelegramHint: document.getElementById('profile-telegram-hint'),
         btnProfileSave: document.getElementById('btn-profile-save'),
         historyListPanel: document.getElementById('history-list-panel'),
@@ -226,8 +223,6 @@
         pendingFriendInvite: null,
         historyDetailId: null,
         opponentName: null,
-        opponentKit: null,
-        profileDraftKit: null,
         lastP1History: [],
         lastP2History: [],
         highlightGuesses: false,
@@ -1161,7 +1156,6 @@
         state.reviewP2Secret = null;
         state.vsAI = false;
         state.opponentName = null;
-        state.opponentKit = null;
         state.cupMatchId = null;
         els.historyBoard.innerHTML = '';
         els.mySecretDisplay.textContent = '____';
@@ -1192,8 +1186,6 @@
         state.opponentName = room.vsAI
             ? 'AI'
             : room.opponentName || state.opponentName;
-        if (room.opponentKit != null) state.opponentKit = room.opponentKit;
-        else if (room.vsAI) state.opponentKit = null;
         state.cupId = room.cupId || state.cupId;
         state.cupMatchId = room.cupMatchId || state.cupMatchId;
         state.gameEnded = false;
@@ -1367,29 +1359,11 @@
         return !state.spectating && state.playerName === 'Player Two';
     }
 
-    function normalizeKit(n) {
-        const k = Number(n);
-        if (!Number.isInteger(k) || k < 1 || k > 99) return null;
-        return k;
-    }
-
-    function kitBadgeHtml(kit) {
-        const k = normalizeKit(kit);
-        if (k == null) return '';
-        return `<span class="kit-badge" aria-hidden="true">${k}</span>`;
-    }
-
-    function setNameLabel(el, text, { you = false, secret = false, kit = null } = {}) {
+    function setNameLabel(el, text, { you = false, secret = false } = {}) {
         if (!el) return;
+        el.textContent = text;
         el.classList.toggle('you-label', Boolean(you) && !secret);
         el.classList.toggle('secret-reveal', Boolean(secret));
-        if (secret || normalizeKit(kit) == null) {
-            el.textContent = text;
-            return;
-        }
-        el.innerHTML = `${kitBadgeHtml(kit)}<span class="player-label-text">${escapeHtml(
-            text
-        )}</span>`;
     }
 
     function opponentSecretForSeat() {
@@ -1405,16 +1379,12 @@
             if (reveal && state.reviewP1Secret) {
                 setNameLabel(els.p1Label, state.reviewP1Secret, { secret: true });
             } else {
-                setNameLabel(els.p1Label, opts.p1Name || 'Player One', {
-                    kit: opts.p1Kit,
-                });
+                setNameLabel(els.p1Label, opts.p1Name || 'Player One');
             }
             if (reveal && state.reviewP2Secret) {
                 setNameLabel(els.p2Label, state.reviewP2Secret, { secret: true });
             } else {
-                setNameLabel(els.p2Label, opts.p2Name || 'Player Two', {
-                    kit: opts.p2Kit,
-                });
+                setNameLabel(els.p2Label, opts.p2Name || 'Player Two');
             }
             return;
         }
@@ -1422,16 +1392,12 @@
             state.vsAI
                 ? 'AI'
                 : opts.oppName || state.opponentName || 'Opponent';
-        const myKit = normalizeKit(state.user?.kit_number);
-        const oppKit = state.vsAI
-            ? null
-            : normalizeKit(opts.oppKit ?? state.opponentKit);
-        setNameLabel(els.p1Label, 'You', { you: true, kit: myKit });
+        setNameLabel(els.p1Label, 'You', { you: true });
         const oppSecret = opponentSecretForSeat();
         if (state.gameEnded && oppSecret) {
             setNameLabel(els.p2Label, oppSecret, { secret: true });
         } else {
-            setNameLabel(els.p2Label, opp, { kit: oppKit });
+            setNameLabel(els.p2Label, opp);
         }
     }
 
@@ -1475,12 +1441,7 @@
     }
 
     function setLoggedInUI(user) {
-        state.user = user
-            ? {
-                  ...user,
-                  kit_number: normalizeKit(user.kit_number),
-              }
-            : null;
+        state.user = user || null;
         els.sessionLoading?.classList.add('hide');
         // Play is always available (guest or logged in)
         els.playPanel?.classList.remove('hide');
@@ -1490,8 +1451,9 @@
             els.profileChipMobile?.classList.remove('hide');
             els.btnLogout?.classList.remove('hide');
             els.btnLogoutMobile?.classList.remove('hide');
+            els.lobbyHero?.classList.add('hide');
             els.lobbyMe?.classList.remove('hide');
-            els.lobbyFriends?.classList.remove('hide');
+            els.navFriendsPeek?.classList.remove('hide');
             if (els.profileName) els.profileName.textContent = state.user.display_name;
             if (els.profileNameMobile)
                 els.profileNameMobile.textContent = state.user.display_name;
@@ -1505,36 +1467,12 @@
             els.profileChipMobile?.classList.add('hide');
             els.btnLogout?.classList.add('hide');
             els.btnLogoutMobile?.classList.add('hide');
+            els.lobbyHero?.classList.remove('hide');
             els.lobbyMe?.classList.add('hide');
-            els.lobbyFriends?.classList.add('hide');
+            els.navFriendsPeek?.classList.add('hide');
             if (els.lobbyFriendsList) els.lobbyFriendsList.innerHTML = '';
             queryClient?.clear();
             updateFriendsBadge(0);
-        }
-    }
-
-    function buildProfileKitGrid(selected) {
-        if (!els.profileKitGrid) return;
-        const sel = normalizeKit(selected) || 1;
-        state.profileDraftKit = sel;
-        let html = '';
-        for (let i = 1; i <= 99; i++) {
-            html += `<button type="button" class="kit-pick${
-                i === sel ? ' is-selected' : ''
-            }" data-kit="${i}" role="option" aria-selected="${
-                i === sel ? 'true' : 'false'
-            }">${i}</button>`;
-        }
-        els.profileKitGrid.innerHTML = html;
-        if (els.profileKitPreview) els.profileKitPreview.textContent = String(sel);
-    }
-
-    function syncProfileFormPreview() {
-        const name = (els.profileDisplayName?.value || '').trim() || '—';
-        if (els.profileFormNamePreview) els.profileFormNamePreview.textContent = name;
-        const kit = normalizeKit(state.profileDraftKit);
-        if (els.profileKitPreview) {
-            els.profileKitPreview.textContent = kit != null ? String(kit) : '—';
         }
     }
 
@@ -1550,8 +1488,6 @@
         if (els.profileDisplayName) {
             els.profileDisplayName.value = state.user.display_name || '';
         }
-        buildProfileKitGrid(state.user.kit_number || 1);
-        syncProfileFormPreview();
         if (els.profileTelegramHint) {
             const tg = state.user.username
                 ? `@${state.user.username}`
@@ -1569,22 +1505,20 @@
             return;
         }
         const display_name = (els.profileDisplayName?.value || '').trim();
-        const kit_number = normalizeKit(state.profileDraftKit);
         if (display_name.length < 2) {
             showToast('Name must be at least 2 characters', 'error');
             return;
         }
-        if (kit_number == null) {
-            showToast('Pick a kit number 1–99', 'error');
-            return;
+        if (els.btnProfileSave) {
+            els.btnProfileSave.disabled = true;
+            els.btnProfileSave.classList.add('is-loading');
         }
-        if (els.btnProfileSave) els.btnProfileSave.disabled = true;
         try {
             const res = await fetch('/api/me', {
                 method: 'PATCH',
                 credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ display_name, kit_number }),
+                body: JSON.stringify({ display_name }),
             });
             const data = await res.json();
             if (!res.ok || !data.user) {
@@ -1600,7 +1534,10 @@
         } catch {
             showToast('Network error', 'error');
         } finally {
-            if (els.btnProfileSave) els.btnProfileSave.disabled = false;
+            if (els.btnProfileSave) {
+                els.btnProfileSave.disabled = false;
+                els.btnProfileSave.classList.remove('is-loading');
+            }
         }
     }
 
@@ -1699,6 +1636,7 @@
                 friendDisplayName(b.friend)
             );
         });
+        // Sidebar peek — presence only (invite stays on Friends tab)
         els.lobbyFriendsList.innerHTML = sorted
             .map((item) => {
                 const fid = item.friend?.id || '';
@@ -1706,15 +1644,10 @@
                     fid
                 )}">
                 <div class="friends-row-main">
-                    <span class="font-medium truncate">${escapeHtml(
+                    <span class="font-medium truncate text-sm">${escapeHtml(
                         friendDisplayName(item.friend)
                     )}</span>
                     ${presenceLabel(item.online)}
-                </div>
-                <div class="friends-row-actions">
-                    <button type="button" class="friends-btn play" data-friend-invite="${escapeHtml(
-                        fid
-                    )}">Invite</button>
                 </div>
             </div>`;
             })
@@ -2192,12 +2125,6 @@
         socket.emit('friendPlayInvite', { userId, sessionId });
     }
 
-    els.lobbyFriendsList?.addEventListener('click', (e) => {
-        const invite = e.target.closest('[data-friend-invite]');
-        if (!invite || invite.disabled) return;
-        inviteFriendToPlay(invite.getAttribute('data-friend-invite'));
-    });
-
     const friendsClickRoot = document.getElementById('screen-friends');
     friendsClickRoot?.addEventListener('click', async (e) => {
         const add = e.target.closest('[data-friend-add]');
@@ -2341,24 +2268,9 @@
     els.navRules?.addEventListener('click', () => showScreen('rules'));
     els.navProfile?.addEventListener('click', () => openProfile());
     els.btnRulesBack?.addEventListener('click', () => goNavPlay());
-    els.btnProfileBack?.addEventListener('click', () => goNavPlay());
     els.profileChip?.addEventListener('click', () => openProfile());
     els.profileChipMobile?.addEventListener('click', () => openProfile());
     els.profileForm?.addEventListener('submit', (e) => saveProfile(e));
-    els.profileDisplayName?.addEventListener('input', () => syncProfileFormPreview());
-    els.profileKitGrid?.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-kit]');
-        if (!btn) return;
-        const kit = normalizeKit(btn.getAttribute('data-kit'));
-        if (kit == null) return;
-        state.profileDraftKit = kit;
-        els.profileKitGrid.querySelectorAll('.kit-pick').forEach((el) => {
-            const on = normalizeKit(el.getAttribute('data-kit')) === kit;
-            el.classList.toggle('is-selected', on);
-            el.setAttribute('aria-selected', on ? 'true' : 'false');
-        });
-        syncProfileFormPreview();
-    });
     els.navBrand?.addEventListener('click', (e) => {
         e.preventDefault();
         goNavPlay();
@@ -2555,7 +2467,6 @@
         state.playerName = msg.playerName;
         state.vsAI = false;
         state.opponentName = msg.opponentName || null;
-        state.opponentKit = msg.opponentKit ?? null;
         state.secret = null;
         state.secretLocked = false;
         state.gameEnded = false;
@@ -2632,7 +2543,6 @@
             id: msg.id,
             display_name: msg.display_name,
             elo: msg.elo,
-            kit_number: msg.kit_number ?? state.user?.kit_number ?? null,
             ai_elo: msg.ai_elo,
         });
         if (msg.ai_elo && els.aiEloHint) {
@@ -2645,7 +2555,6 @@
         state.playerName = msg.playerName;
         state.vsAI = true;
         state.opponentName = 'AI';
-        state.opponentKit = null;
         state.gameEnded = false;
         const eng = msg.engine === 'neural' ? 'trained model' : 'heuristic AI';
         const eloBit = msg.aiElo != null ? ` · ${msg.aiElo} Elo` : '';
@@ -2654,7 +2563,6 @@
 
     socket.on('opponentJoined', (msg) => {
         if (msg?.opponentName) state.opponentName = msg.opponentName;
-        if (msg?.opponentKit != null) state.opponentKit = msg.opponentKit;
         const name = state.opponentName || 'Opponent';
         if (msg?.message) showToast(msg.message, 'info');
         goToSecretScreen(`${name} joined — set your secret number`);
@@ -2665,7 +2573,6 @@
         state.playerName = msg.playerName;
         state.vsAI = false;
         if (msg?.opponentName) state.opponentName = msg.opponentName;
-        if (msg?.opponentKit != null) state.opponentKit = msg.opponentKit;
         const vs = state.opponentName ? ` vs ${state.opponentName}` : '';
         goToSecretScreen(`Joined${vs} — set your secret number`);
     });
@@ -2677,7 +2584,6 @@
         state.playerName = msg.playerName;
         state.vsAI = false;
         if (msg?.opponentName) state.opponentName = msg.opponentName;
-        if (msg?.opponentKit != null) state.opponentKit = msg.opponentKit;
         state.secret = null;
         state.secretLocked = false;
         state.gameEnded = false;

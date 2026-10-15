@@ -18,10 +18,6 @@ function displayNameFromTelegram({ first_name, last_name, username, telegram_id 
     return `Player ${telegram_id}`;
 }
 
-function randomKitNumber() {
-    return 1 + Math.floor(Math.random() * 99);
-}
-
 export async function upsertTelegramUser(contact) {
     const sql = getSql();
     const telegramId = Number(contact.telegram_id);
@@ -30,16 +26,14 @@ export async function upsertTelegramUser(contact) {
     }
 
     const displayName = displayNameFromTelegram(contact);
-    const kit = randomKitNumber();
     const rows = await sql`
-        INSERT INTO users (telegram_id, phone, username, display_name, elo, kit_number)
+        INSERT INTO users (telegram_id, phone, username, display_name, elo)
         VALUES (
             ${telegramId},
             ${contact.phone_number ?? null},
             ${contact.username ?? null},
             ${displayName},
-            ${ELO_START},
-            ${kit}
+            ${ELO_START}
         )
         ON CONFLICT (telegram_id) DO UPDATE SET
             phone = COALESCE(EXCLUDED.phone, users.phone),
@@ -50,68 +44,33 @@ export async function upsertTelegramUser(contact) {
                 THEN EXCLUDED.display_name
                 ELSE users.display_name
             END,
-            kit_number = COALESCE(users.kit_number, EXCLUDED.kit_number),
             updated_at = now()
-        RETURNING id, telegram_id, phone, username, display_name, elo, kit_number, created_at
+        RETURNING id, telegram_id, phone, username, display_name, elo, created_at
     `;
     return rows[0];
 }
 
 /**
  * @param {string} userId
- * @param {{ display_name?: string, kit_number?: number }} patch
+ * @param {{ display_name?: string }} patch
  */
 export async function updateUserProfile(userId, patch = {}) {
     const sql = getSql();
-    const updates = {};
-
-    if (patch.display_name != null) {
-        const name = String(patch.display_name).trim().slice(0, 40);
-        if (name.length < 2) {
-            return { ok: false, reason: 'Name must be at least 2 characters' };
-        }
-        updates.display_name = name;
-    }
-
-    if (patch.kit_number != null) {
-        const kit = Number(patch.kit_number);
-        if (!Number.isInteger(kit) || kit < 1 || kit > 99) {
-            return { ok: false, reason: 'Kit number must be 1–99' };
-        }
-        updates.kit_number = kit;
-    }
-
-    if (!Object.keys(updates).length) {
+    if (patch.display_name == null) {
         return { ok: false, reason: 'Nothing to update' };
     }
-
-    let rows;
-    if (updates.display_name != null && updates.kit_number != null) {
-        rows = await sql`
-            UPDATE users SET
-                display_name = ${updates.display_name},
-                kit_number = ${updates.kit_number},
-                updated_at = now()
-            WHERE id = ${userId}
-            RETURNING id, telegram_id, phone, username, display_name, elo, kit_number
-        `;
-    } else if (updates.display_name != null) {
-        rows = await sql`
-            UPDATE users SET
-                display_name = ${updates.display_name},
-                updated_at = now()
-            WHERE id = ${userId}
-            RETURNING id, telegram_id, phone, username, display_name, elo, kit_number
-        `;
-    } else {
-        rows = await sql`
-            UPDATE users SET
-                kit_number = ${updates.kit_number},
-                updated_at = now()
-            WHERE id = ${userId}
-            RETURNING id, telegram_id, phone, username, display_name, elo, kit_number
-        `;
+    const name = String(patch.display_name).trim().slice(0, 40);
+    if (name.length < 2) {
+        return { ok: false, reason: 'Name must be at least 2 characters' };
     }
+
+    const rows = await sql`
+        UPDATE users SET
+            display_name = ${name},
+            updated_at = now()
+        WHERE id = ${userId}
+        RETURNING id, telegram_id, phone, username, display_name, elo
+    `;
     if (!rows[0]) return { ok: false, reason: 'User not found' };
     return { ok: true, user: rows[0] };
 }
@@ -162,7 +121,7 @@ export async function consumeMagicLink(rawToken) {
 
     const session = await createSession(row.user_id);
     const users = await sql`
-        SELECT id, telegram_id, phone, username, display_name, elo, kit_number
+        SELECT id, telegram_id, phone, username, display_name, elo
         FROM users WHERE id = ${row.user_id}
     `;
 
@@ -194,7 +153,7 @@ export async function getUserBySessionRaw(rawSession) {
     const now = new Date();
 
     const rows = await sql`
-        SELECT u.id, u.telegram_id, u.phone, u.username, u.display_name, u.elo, u.kit_number, s.expires_at
+        SELECT u.id, u.telegram_id, u.phone, u.username, u.display_name, u.elo, s.expires_at
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.session_hash = ${sessionHash}

@@ -110,7 +110,6 @@ router.post('/auth/consume', dbRequired, async (req, res) => {
                 display_name: result.user.display_name,
                 username: result.user.username,
                 elo: result.user.elo,
-                kit_number: result.user.kit_number ?? null,
             },
         });
     } catch (err) {
@@ -125,7 +124,6 @@ router.get('/me', dbRequired, requireUser, (req, res) => {
         display_name: req.user.display_name,
         username: req.user.username,
         elo: req.user.elo,
-        kit_number: req.user.kit_number ?? null,
         telegram_id: req.user.telegram_id ?? null,
         ai_elo: AI_DEFAULT_ELO,
         elo_start: ELO_START,
@@ -135,10 +133,9 @@ router.get('/me', dbRequired, requireUser, (req, res) => {
 router.patch('/me', dbRequired, requireUser, async (req, res) => {
     try {
         const body = req.body || {};
-        const patch = {};
-        if (body.display_name != null) patch.display_name = body.display_name;
-        if (body.kit_number != null) patch.kit_number = body.kit_number;
-        const result = await updateUserProfile(req.user.id, patch);
+        const result = await updateUserProfile(req.user.id, {
+            display_name: body.display_name,
+        });
         if (!result.ok) {
             return res.status(400).json({ error: result.reason || 'Update failed' });
         }
@@ -149,7 +146,6 @@ router.patch('/me', dbRequired, requireUser, async (req, res) => {
                 display_name: result.user.display_name,
                 username: result.user.username,
                 elo: result.user.elo,
-                kit_number: result.user.kit_number ?? null,
                 telegram_id: result.user.telegram_id ?? null,
             },
         });
