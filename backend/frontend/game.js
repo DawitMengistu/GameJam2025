@@ -1083,7 +1083,7 @@
             els.rematchInviteText.textContent = `${fromName || 'Opponent'} wants a rematch`;
         }
         els.rematchInviteBar?.classList.remove('hide');
-        showToast(`${fromName || 'Opponent'} wants a rematch`, 'info');
+        playChatSound();
     }
 
     function getRandomGuess() {
@@ -1655,11 +1655,13 @@
                         friendDisplayName(item.friend)
                     )}</span>
                 </div>
-                <div class="friends-row-actions">
-                    <button type="button" class="nav-friend-invite" data-friend-invite="${escapeHtml(
-                        fid
-                    )}">Invite</button>
-                </div>
+                <div class="friends-row-actions">${
+                    on
+                        ? `<button type="button" class="nav-friend-invite" data-friend-invite="${escapeHtml(
+                              fid
+                          )}">Invite</button>`
+                        : ''
+                }</div>
             </div>`;
             })
             .join('');
@@ -1790,6 +1792,7 @@
         els.friendsAccepted.innerHTML = list
             .map((item) => {
                 const fid = item.friend?.id || '';
+                const on = Boolean(item.online);
                 return `<div class="friends-row" data-friend-user-id="${escapeHtml(
                     fid
                 )}">
@@ -1797,12 +1800,16 @@
                     <span class="font-medium truncate">${escapeHtml(
                         friendDisplayName(item.friend)
                     )}</span>
-                    ${presenceLabel(item.online)}
+                    ${presenceLabel(on)}
                 </div>
                 <div class="friends-row-actions">
-                    <button type="button" class="friends-btn play" data-friend-invite="${escapeHtml(
-                        fid
-                    )}">Invite</button>
+                    ${
+                        on
+                            ? `<button type="button" class="friends-btn play" data-friend-invite="${escapeHtml(
+                                  fid
+                              )}">Invite</button>`
+                            : ''
+                    }
                     <button type="button" class="friends-btn secondary" data-friend-remove="${escapeHtml(
                         item.id
                     )}">Remove</button>
@@ -1873,6 +1880,7 @@
             } invited you to play`;
         }
         els.friendInviteBar?.classList.remove('hide');
+        playChatSound();
     }
 
     function showHistoryList() {
@@ -2177,6 +2185,13 @@
         if (!userId) return;
         if (inLivePlay() || inSetupMatch() || state.cupId) {
             showToast('Leave your current game or cup first', 'info');
+            return;
+        }
+        const friend = (getFriendsData().accepted || []).find((item) =>
+            sameUserId(item.friend?.id, userId)
+        );
+        if (friend && !friend.online) {
+            showToast('Friend is offline', 'info');
             return;
         }
         socket.emit('friendPlayInvite', { userId, sessionId });
@@ -2875,6 +2890,7 @@
         } else {
             updateFriendsBadge();
         }
+        playChatSound();
         if (state.screen !== 'friends') {
             showToast(
                 `${friendDisplayName(msg.from)} sent a friend request`,
@@ -2937,10 +2953,6 @@
     socket.on('friendPlayInvite', (msg) => {
         if (!msg?.roomId) return;
         showFriendInviteBar(msg);
-        showToast(
-            `${msg.fromName || 'A friend'} invited you to play`,
-            'info'
-        );
     });
 
     socket.on('friendPlayInviteResult', (msg) => {
