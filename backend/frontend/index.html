@@ -108,6 +108,14 @@
                     class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
                     History
                 </button>
+                <button type="button" id="nav-rules"
+                    class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
+                    Rules
+                </button>
+                <button type="button" id="nav-profile"
+                    class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
+                    Profile
+                </button>
             </nav>
 
             <div class="hidden md:flex flex-col gap-3 mt-auto">
@@ -140,11 +148,16 @@
             <div id="toast-root" class="toast-root" aria-live="polite"></div>
 
             <div class="rematch-invite-bar hide" id="rematch-invite-bar" role="dialog" aria-live="polite">
-                <p class="rematch-invite-text font-medium" id="rematch-invite-text">Rematch?</p>
-                <button type="button" id="btn-rematch-accept"
-                    class="bottom-btn btn-play-again font-medium">Accept</button>
-                <button type="button" id="btn-rematch-decline"
-                    class="bottom-btn btn-end-home font-medium">Decline</button>
+                <div class="invite-notify-body">
+                    <span class="invite-notify-brand" aria-hidden="true">ATP</span>
+                    <p class="rematch-invite-text font-medium" id="rematch-invite-text">Rematch?</p>
+                </div>
+                <div class="rematch-invite-actions">
+                    <button type="button" id="btn-rematch-accept"
+                        class="bottom-btn btn-play-again font-medium">Accept</button>
+                    <button type="button" id="btn-rematch-decline"
+                        class="bottom-btn btn-end-home font-medium">Decline</button>
+                </div>
             </div>
 
             <!-- LOBBY -->
@@ -152,9 +165,19 @@
                 <div
                     class="w-full max-w-md mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-7 sm:p-9 text-center">
                     <h1 class="brand text-4xl sm:text-5xl font-semibold tracking-wide text-green-main m-0">ATP</h1>
-                    <p class="mt-3 mb-7 text-muted text-[0.95rem] leading-relaxed">
+                    <p class="mt-3 mb-5 text-muted text-[0.95rem] leading-relaxed">
                         Crack your opponent’s number. No zeros. No repeats.
                     </p>
+
+                    <div id="lobby-me" class="lobby-me hide" aria-live="polite">
+                        <div class="lobby-me-main">
+                            <p class="lobby-me-name m-0 font-semibold truncate" id="lobby-me-name">—</p>
+                            <p class="lobby-me-meta m-0 text-sm text-muted">
+                                Elo <span class="lobby-me-elo font-semibold text-green-main" id="lobby-me-elo">—</span>
+                            </p>
+                        </div>
+                        <span class="lobby-me-online friends-presence is-online">Online</span>
+                    </div>
 
                     <div id="session-loading" class="session-loading flex flex-col items-center gap-3 py-4">
                         <div class="auth-spinner" aria-hidden="true"></div>
@@ -205,6 +228,14 @@
                             class="hide md:hidden w-full rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 hover:bg-page hover:text-ink transition-colors">
                             Log out
                         </button>
+                    </div>
+
+                    <div id="lobby-friends" class="lobby-friends hide">
+                        <div class="lobby-friends-head">
+                            <h3 class="lobby-friends-title m-0">Friends</h3>
+                            <span class="lobby-friends-hint text-xs text-muted">Invite to play</span>
+                        </div>
+                        <div id="lobby-friends-list" class="lobby-friends-list friends-list"></div>
                     </div>
 
                     <p class="mt-6 text-xs text-muted m-0">
@@ -348,9 +379,82 @@
                 </div>
             </section>
 
+            <!-- RULES -->
+            <section id="screen-rules" class="screen screen-rules hide">
+                <div
+                    class="w-full max-w-lg mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-6 sm:p-8 text-left">
+                    <h2 class="text-xl font-semibold m-0 mb-1">Rules</h2>
+                    <p class="text-sm text-muted m-0 mb-5">How ATP works</p>
+                    <div class="rules-body text-sm leading-relaxed text-ink dark:text-[#e8ece4]">
+                        <ol class="rules-list m-0 pl-5 flex flex-col gap-3">
+                            <li>Each player secretly picks a <strong>4-digit number</strong>.</li>
+                            <li>Digits are <strong>1–9 only</strong> — no zeros, and each digit may appear <strong>once</strong>.</li>
+                            <li>On your turn, guess your opponent’s number.</li>
+                            <li>Feedback uses <strong>N</strong> (correct digit, wrong place) and <strong>O</strong> (correct digit in the correct place).</li>
+                            <li>First to guess the opponent’s full number wins. Missed turns / resign can end the match early.</li>
+                            <li>Use the digit tracker on the side to mark digits red / green / yellow while you think.</li>
+                        </ol>
+                    </div>
+                    <button type="button" id="btn-rules-back"
+                        class="w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors mt-6">
+                        Back
+                    </button>
+                </div>
+            </section>
+
+            <!-- PROFILE -->
+            <section id="screen-profile" class="screen screen-profile hide">
+                <div
+                    class="w-full max-w-lg mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-6 sm:p-8 text-left">
+                    <h2 class="text-xl font-semibold m-0 mb-1">Profile</h2>
+                    <p class="text-sm text-muted m-0 mb-5">Display name and kit number — Telegram login stays linked</p>
+
+                    <div id="profile-guest" class="hide">
+                        <p class="friends-empty mb-4">Log in with Telegram to edit your profile.</p>
+                    </div>
+
+                    <form id="profile-form" class="profile-form hide flex flex-col gap-4" autocomplete="off">
+                        <div class="profile-kit-preview-wrap flex items-center gap-3">
+                            <span class="kit-badge kit-badge-lg" id="profile-kit-preview">—</span>
+                            <div class="min-w-0">
+                                <p class="m-0 font-semibold truncate" id="profile-form-name-preview">—</p>
+                                <p class="m-0 text-xs text-muted mt-0.5">Shown on the match board</p>
+                            </div>
+                        </div>
+
+                        <label class="flex flex-col gap-1.5 text-sm">
+                            <span class="font-medium">Display name</span>
+                            <input type="text" id="profile-display-name" maxlength="40"
+                                class="field-input w-full rounded-xl border-2 border-[#d5d8d0] dark:border-white/20 focus:border-green-main outline-none px-3.5 py-3 bg-white dark:bg-[#12151a] dark:text-[#e8ece4]"
+                                placeholder="Your name in ATP">
+                        </label>
+
+                        <div>
+                            <p class="m-0 mb-2 text-sm font-medium">Kit number (1–99)</p>
+                            <div id="profile-kit-grid" class="profile-kit-grid" role="listbox" aria-label="Choose kit number"></div>
+                        </div>
+
+                        <p class="m-0 text-xs text-muted" id="profile-telegram-hint"></p>
+
+                        <button type="submit" id="btn-profile-save"
+                            class="w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors">
+                            Save profile
+                        </button>
+                    </form>
+
+                    <button type="button" id="btn-profile-back"
+                        class="w-full rounded-xl px-4 py-3 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] transition-colors mt-4">
+                        Back
+                    </button>
+                </div>
+            </section>
+
             <!-- Friend play invite bar -->
             <div id="friend-invite-bar" class="rematch-invite-bar hide" role="dialog" aria-live="polite">
-                <p class="rematch-invite-text" id="friend-invite-text">Friend invite</p>
+                <div class="invite-notify-body">
+                    <span class="invite-notify-brand" aria-hidden="true">ATP</span>
+                    <p class="rematch-invite-text font-medium" id="friend-invite-text">Friend invite</p>
+                </div>
                 <div class="rematch-invite-actions">
                     <button type="button" id="btn-friend-invite-accept" class="bottom-btn btn-play-again font-medium">Accept</button>
                     <button type="button" id="btn-friend-invite-decline" class="bottom-btn btn-end-home font-medium">Decline</button>
@@ -363,11 +467,11 @@
                     class="w-full max-w-md mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-7 sm:p-9 text-center">
                     <h2 class="text-xl font-semibold m-0 mb-2">Your room</h2>
                     <p class="text-sm text-muted m-0 mb-5" id="waiting-status">Share this code with a friend</p>
-                    <div class="flex items-center justify-center gap-3 flex-wrap mb-6">
+                    <div class="waiting-code-row flex items-stretch justify-center gap-3 flex-wrap mb-6">
                         <span id="room-code-text"
-                            class="room-code text-2xl sm:text-3xl font-semibold tracking-[0.28em] px-5 py-3 bg-[#f4f6f1] dark:bg-[#232933] rounded-xl border border-dashed border-green-main/50 text-green-main">------</span>
+                            class="room-code text-2xl sm:text-3xl font-semibold tracking-[0.28em] px-5 bg-[#f4f6f1] dark:bg-[#232933] rounded-xl border border-dashed border-green-main/50 text-green-main">------</span>
                         <button type="button" id="btn-copy-code"
-                            class="rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
+                            class="btn-copy-code rounded-xl px-4 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
                             Copy link
                         </button>
                     </div>

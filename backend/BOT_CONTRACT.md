@@ -100,6 +100,6 @@ bot.on('contact', async (ctx) => {
 | `TELEGRAM_BOT_TOKEN` | BotFather token (for your Telegraf process) |
 | `TELEGRAM_BOT_USERNAME` | Bot username without `@` (lobby login button) |
 | `AI_DEFAULT_ELO` | AI rating shown in UI (default 1200) |
-| `APP_PUBLIC_URL` | Public URL for magic links (e.g. `http://localhost:3000`) |
+| `APP_PUBLIC_URL` | Public HTTPS origin for magic links. Use `http://localhost:3000` only for local dev; production must be a real public URL (or rely on Render/Railway/Fly/Vercel env) |
 
 Neon project: **ATP** (`silent-sunset-77534428`), database **`atp`**.

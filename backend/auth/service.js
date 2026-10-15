@@ -1,5 +1,6 @@
 import { getSql } from '../db/pool.js';
 import { ELO_START } from '../db/elo.js';
+import { getAppPublicUrl } from '../appPublicUrl.js';
 import { randomToken, sha256 } from './crypto.js';
 
 const SESSION_DAYS = 30;
@@ -17,6 +18,10 @@ function displayNameFromTelegram({ first_name, last_name, username, telegram_id 
     return `Player ${telegram_id}`;
 }
 
+function randomKitNumber() {
+    return 1 + Math.floor(Math.random() * 99);
+}
+
 export async function upsertTelegramUser(contact) {
     const sql = getSql();
     const telegramId = Number(contact.telegram_id);
@@ -25,26 +30,97 @@ export async function upsertTelegramUser(contact) {
     }
 
     const displayName = displayNameFromTelegram(contact);
+    const kit = randomKitNumber();
     const rows = await sql`
-        INSERT INTO users (telegram_id, phone, username, display_name, elo)
+        INSERT INTO users (telegram_id, phone, username, display_name, elo, kit_number)
         VALUES (
             ${telegramId},
             ${contact.phone_number ?? null},
             ${contact.username ?? null},
             ${displayName},
-            ${ELO_START}
+            ${ELO_START},
+            ${kit}
         )
         ON CONFLICT (telegram_id) DO UPDATE SET
             phone = COALESCE(EXCLUDED.phone, users.phone),
             username = COALESCE(EXCLUDED.username, users.username),
-            display_name = EXCLUDED.display_name,
+            -- Keep player-chosen display_name; only fill if somehow empty
+            display_name = CASE
+                WHEN users.display_name IS NULL OR BTRIM(users.display_name) = ''
+                THEN EXCLUDED.display_name
+                ELSE users.display_name
+            END,
+            kit_number = COALESCE(users.kit_number, EXCLUDED.kit_number),
             updated_at = now()
-        RETURNING id, telegram_id, phone, username, display_name, elo, created_at
+        RETURNING id, telegram_id, phone, username, display_name, elo, kit_number, created_at
     `;
     return rows[0];
 }
 
-export async function createMagicLink(userId) {
+/**
+ * @param {string} userId
+ * @param {{ display_name?: string, kit_number?: number }} patch
+ */
+export async function updateUserProfile(userId, patch = {}) {
+    const sql = getSql();
+    const updates = {};
+
+    if (patch.display_name != null) {
+        const name = String(patch.display_name).trim().slice(0, 40);
+        if (name.length < 2) {
+            return { ok: false, reason: 'Name must be at least 2 characters' };
+        }
+        updates.display_name = name;
+    }
+
+    if (patch.kit_number != null) {
+        const kit = Number(patch.kit_number);
+        if (!Number.isInteger(kit) || kit < 1 || kit > 99) {
+            return { ok: false, reason: 'Kit number must be 1–99' };
+        }
+        updates.kit_number = kit;
+    }
+
+    if (!Object.keys(updates).length) {
+        return { ok: false, reason: 'Nothing to update' };
+    }
+
+    let rows;
+    if (updates.display_name != null && updates.kit_number != null) {
+        rows = await sql`
+            UPDATE users SET
+                display_name = ${updates.display_name},
+                kit_number = ${updates.kit_number},
+                updated_at = now()
+            WHERE id = ${userId}
+            RETURNING id, telegram_id, phone, username, display_name, elo, kit_number
+        `;
+    } else if (updates.display_name != null) {
+        rows = await sql`
+            UPDATE users SET
+                display_name = ${updates.display_name},
+                updated_at = now()
+            WHERE id = ${userId}
+            RETURNING id, telegram_id, phone, username, display_name, elo, kit_number
+        `;
+    } else {
+        rows = await sql`
+            UPDATE users SET
+                kit_number = ${updates.kit_number},
+                updated_at = now()
+            WHERE id = ${userId}
+            RETURNING id, telegram_id, phone, username, display_name, elo, kit_number
+        `;
+    }
+    if (!rows[0]) return { ok: false, reason: 'User not found' };
+    return { ok: true, user: rows[0] };
+}
+
+/**
+ * @param {string} userId
+ * @param {import('express').Request | null} [req] used to derive public host when env is localhost
+ */
+export async function createMagicLink(userId, req = null) {
     const sql = getSql();
     const raw = randomToken(32);
     const tokenHash = sha256(raw);
@@ -55,7 +131,7 @@ export async function createMagicLink(userId) {
         VALUES (${tokenHash}, ${userId}, ${expiresAt.toISOString()})
     `;
 
-    const base = (process.env.APP_PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, '');
+    const base = getAppPublicUrl(req);
     return {
         url: `${base}/auth?token=${raw}`,
         expires_in_seconds: MAGIC_LINK_MINUTES * 60,
@@ -86,7 +162,7 @@ export async function consumeMagicLink(rawToken) {
 
     const session = await createSession(row.user_id);
     const users = await sql`
-        SELECT id, telegram_id, phone, username, display_name, elo
+        SELECT id, telegram_id, phone, username, display_name, elo, kit_number
         FROM users WHERE id = ${row.user_id}
     `;
 
@@ -118,7 +194,7 @@ export async function getUserBySessionRaw(rawSession) {
     const now = new Date();
 
     const rows = await sql`
-        SELECT u.id, u.telegram_id, u.phone, u.username, u.display_name, u.elo, s.expires_at
+        SELECT u.id, u.telegram_id, u.phone, u.username, u.display_name, u.elo, u.kit_number, s.expires_at
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.session_hash = ${sessionHash}

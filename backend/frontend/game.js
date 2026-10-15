@@ -74,6 +74,8 @@
         cupLobby: document.getElementById('screen-cup-lobby'),
         friends: document.getElementById('screen-friends'),
         history: document.getElementById('screen-history'),
+        rules: document.getElementById('screen-rules'),
+        profile: document.getElementById('screen-profile'),
         waiting: document.getElementById('screen-waiting'),
         secret: document.getElementById('screen-secret'),
         play: document.getElementById('screen-play'),
@@ -90,6 +92,11 @@
         profileNameMobile: document.getElementById('profile-name-mobile'),
         profileEloMobile: document.getElementById('profile-elo-mobile'),
         sessionLoading: document.getElementById('session-loading'),
+        lobbyMe: document.getElementById('lobby-me'),
+        lobbyMeName: document.getElementById('lobby-me-name'),
+        lobbyMeElo: document.getElementById('lobby-me-elo'),
+        lobbyFriends: document.getElementById('lobby-friends'),
+        lobbyFriendsList: document.getElementById('lobby-friends-list'),
         authPanel: document.getElementById('auth-panel'),
         playPanel: document.getElementById('play-panel'),
         btnLoginTelegram: document.getElementById('btn-login-telegram'),
@@ -102,7 +109,19 @@
         navFriends: document.getElementById('nav-friends'),
         friendsBadge: document.getElementById('friends-badge'),
         navHistory: document.getElementById('nav-history'),
+        navRules: document.getElementById('nav-rules'),
+        navProfile: document.getElementById('nav-profile'),
         btnHistoryBack: document.getElementById('btn-history-back'),
+        btnRulesBack: document.getElementById('btn-rules-back'),
+        btnProfileBack: document.getElementById('btn-profile-back'),
+        profileGuest: document.getElementById('profile-guest'),
+        profileForm: document.getElementById('profile-form'),
+        profileDisplayName: document.getElementById('profile-display-name'),
+        profileKitGrid: document.getElementById('profile-kit-grid'),
+        profileKitPreview: document.getElementById('profile-kit-preview'),
+        profileFormNamePreview: document.getElementById('profile-form-name-preview'),
+        profileTelegramHint: document.getElementById('profile-telegram-hint'),
+        btnProfileSave: document.getElementById('btn-profile-save'),
         historyListPanel: document.getElementById('history-list-panel'),
         historyDetailPanel: document.getElementById('history-detail-panel'),
         historyDetailTitle: document.getElementById('history-detail-title'),
@@ -207,6 +226,8 @@
         pendingFriendInvite: null,
         historyDetailId: null,
         opponentName: null,
+        opponentKit: null,
+        profileDraftKit: null,
         lastP1History: [],
         lastP2History: [],
         highlightGuesses: false,
@@ -240,8 +261,10 @@
 
     /**
      * Filter keystrokes: only 1-9, no duplicates. Toast on illegal attempt.
+     * @param {number} [maxLen=4] — use 3 while waiting so players can brainstorm
      */
-    function filterDigitInput(raw, previous) {
+    function filterDigitInput(raw, previous, maxLen = 4) {
+        const limit = Math.max(1, Math.min(4, Number(maxLen) || 4));
         const cleaned = String(raw).replace(/\D/g, '');
         let result = '';
         for (const ch of cleaned) {
@@ -253,8 +276,8 @@
                 showToast('Each digit must be unique', 'error');
                 continue;
             }
+            if (result.length >= limit) break;
             result += ch;
-            if (result.length >= 4) break;
         }
         if (result === previous) return previous;
         return result;
@@ -277,6 +300,8 @@
         els.navCups?.classList.toggle('nav-link-active', which === 'cups');
         els.navFriends?.classList.toggle('nav-link-active', which === 'friends');
         els.navHistory?.classList.toggle('nav-link-active', which === 'history');
+        els.navRules?.classList.toggle('nav-link-active', which === 'rules');
+        els.navProfile?.classList.toggle('nav-link-active', which === 'profile');
     }
 
     function showScreen(name) {
@@ -287,6 +312,8 @@
         if (name === 'history') setNavActive('history');
         else if (name === 'friends') setNavActive('friends');
         else if (name === 'cups' || name === 'cupLobby') setNavActive('cups');
+        else if (name === 'rules') setNavActive('rules');
+        else if (name === 'profile') setNavActive('profile');
         else setNavActive('play');
         persistPlayState();
     }
@@ -515,8 +542,8 @@
         }
         els.historyBoard.innerHTML = '';
         els.mySecretDisplay.textContent = '____';
-        els.p1Label?.classList.remove('you-label');
-        els.p2Label?.classList.remove('you-label');
+        els.p1Label?.classList.remove('you-label', 'secret-reveal');
+        els.p2Label?.classList.remove('you-label', 'secret-reveal');
         showScreen('cupLobby');
     }
 
@@ -547,10 +574,6 @@
             els.playEloLine.classList.remove('hide');
         }
 
-        applyBoardLabels({
-            p1Name: snapshot.playerOneName || 'Player One',
-            p2Name: snapshot.playerTwoName || 'Player Two',
-        });
         els.mySecretDisplay.textContent = '····';
         els.sideRoom.textContent = `Cup ${snapshot.cupCode || state.cupId || '—'}`;
         els.sideRole.textContent = 'Spectator';
@@ -560,6 +583,10 @@
             !snapshot.live || snapshot.status === 'done' || Boolean(snapshot.winnerName);
         state.reviewP1Secret = snapshot.playerOneSecret || null;
         state.reviewP2Secret = snapshot.playerTwoSecret || null;
+        applyBoardLabels({
+            p1Name: snapshot.playerOneName || 'Player One',
+            p2Name: snapshot.playerTwoName || 'Player Two',
+        });
         renderResults(
             snapshot.playerOneHistory || [],
             snapshot.playerTwoHistory || []
@@ -737,6 +764,7 @@
         const text = String(elo);
         if (els.profileElo) els.profileElo.textContent = text;
         if (els.profileEloMobile) els.profileEloMobile.textContent = text;
+        if (els.lobbyMeElo) els.lobbyMeElo.textContent = text;
     }
 
     function syncUserCount(count) {
@@ -998,6 +1026,7 @@
         els.guessInput.disabled = true;
         els.btnResign.disabled = true;
         stopAllTimers();
+        applyBoardLabels();
         refreshHistoryHighlights();
         playEndSound(didWin);
         showResultPopup(didWin);
@@ -1132,6 +1161,7 @@
         state.reviewP2Secret = null;
         state.vsAI = false;
         state.opponentName = null;
+        state.opponentKit = null;
         state.cupMatchId = null;
         els.historyBoard.innerHTML = '';
         els.mySecretDisplay.textContent = '____';
@@ -1141,8 +1171,10 @@
         els.btnResign.disabled = false;
         els.joinCodeInput.value = '';
         els.btnSetSecret.disabled = true;
-        els.p1Label.classList.remove('you-label');
-        els.p2Label.classList.remove('you-label');
+        els.p1Label.classList.remove('you-label', 'secret-reveal');
+        els.p2Label.classList.remove('you-label', 'secret-reveal');
+        if (els.p1Label) els.p1Label.textContent = 'You';
+        if (els.p2Label) els.p2Label.textContent = 'Opponent';
         if (!state.cupId) clearPlayState();
         resetDigitTracker();
         clearMatchChat();
@@ -1160,6 +1192,8 @@
         state.opponentName = room.vsAI
             ? 'AI'
             : room.opponentName || state.opponentName;
+        if (room.opponentKit != null) state.opponentKit = room.opponentKit;
+        else if (room.vsAI) state.opponentKit = null;
         state.cupId = room.cupId || state.cupId;
         state.cupMatchId = room.cupMatchId || state.cupMatchId;
         state.gameEnded = false;
@@ -1333,15 +1367,54 @@
         return !state.spectating && state.playerName === 'Player Two';
     }
 
+    function normalizeKit(n) {
+        const k = Number(n);
+        if (!Number.isInteger(k) || k < 1 || k > 99) return null;
+        return k;
+    }
+
+    function kitBadgeHtml(kit) {
+        const k = normalizeKit(kit);
+        if (k == null) return '';
+        return `<span class="kit-badge" aria-hidden="true">${k}</span>`;
+    }
+
+    function setNameLabel(el, text, { you = false, secret = false, kit = null } = {}) {
+        if (!el) return;
+        el.classList.toggle('you-label', Boolean(you) && !secret);
+        el.classList.toggle('secret-reveal', Boolean(secret));
+        if (secret || normalizeKit(kit) == null) {
+            el.textContent = text;
+            return;
+        }
+        el.innerHTML = `${kitBadgeHtml(kit)}<span class="player-label-text">${escapeHtml(
+            text
+        )}</span>`;
+    }
+
+    function opponentSecretForSeat() {
+        if (state.playerName === 'Player Two') return state.reviewP1Secret;
+        return state.reviewP2Secret;
+    }
+
     function applyBoardLabels(opts = {}) {
         if (state.spectating) {
-            if (els.p1Label) {
-                els.p1Label.textContent = opts.p1Name || 'Player One';
-                els.p1Label.classList.remove('you-label');
+            const reveal =
+                Boolean(state.reviewP1Secret || state.reviewP2Secret) &&
+                (state.gameEnded || state.highlightGuesses);
+            if (reveal && state.reviewP1Secret) {
+                setNameLabel(els.p1Label, state.reviewP1Secret, { secret: true });
+            } else {
+                setNameLabel(els.p1Label, opts.p1Name || 'Player One', {
+                    kit: opts.p1Kit,
+                });
             }
-            if (els.p2Label) {
-                els.p2Label.textContent = opts.p2Name || 'Player Two';
-                els.p2Label.classList.remove('you-label');
+            if (reveal && state.reviewP2Secret) {
+                setNameLabel(els.p2Label, state.reviewP2Secret, { secret: true });
+            } else {
+                setNameLabel(els.p2Label, opts.p2Name || 'Player Two', {
+                    kit: opts.p2Kit,
+                });
             }
             return;
         }
@@ -1349,13 +1422,16 @@
             state.vsAI
                 ? 'AI'
                 : opts.oppName || state.opponentName || 'Opponent';
-        if (els.p1Label) {
-            els.p1Label.textContent = 'You';
-            els.p1Label.classList.add('you-label');
-        }
-        if (els.p2Label) {
-            els.p2Label.textContent = opp;
-            els.p2Label.classList.remove('you-label');
+        const myKit = normalizeKit(state.user?.kit_number);
+        const oppKit = state.vsAI
+            ? null
+            : normalizeKit(opts.oppKit ?? state.opponentKit);
+        setNameLabel(els.p1Label, 'You', { you: true, kit: myKit });
+        const oppSecret = opponentSecretForSeat();
+        if (state.gameEnded && oppSecret) {
+            setNameLabel(els.p2Label, oppSecret, { secret: true });
+        } else {
+            setNameLabel(els.p2Label, opp, { kit: oppKit });
         }
     }
 
@@ -1399,28 +1475,132 @@
     }
 
     function setLoggedInUI(user) {
-        state.user = user;
+        state.user = user
+            ? {
+                  ...user,
+                  kit_number: normalizeKit(user.kit_number),
+              }
+            : null;
         els.sessionLoading?.classList.add('hide');
         // Play is always available (guest or logged in)
         els.playPanel?.classList.remove('hide');
-        if (user) {
+        if (state.user) {
             els.authPanel?.classList.add('hide');
             els.profileChip?.classList.remove('hide');
             els.profileChipMobile?.classList.remove('hide');
             els.btnLogout?.classList.remove('hide');
             els.btnLogoutMobile?.classList.remove('hide');
-            if (els.profileName) els.profileName.textContent = user.display_name;
-            if (els.profileNameMobile) els.profileNameMobile.textContent = user.display_name;
-            syncProfileElo(user.elo);
+            els.lobbyMe?.classList.remove('hide');
+            els.lobbyFriends?.classList.remove('hide');
+            if (els.profileName) els.profileName.textContent = state.user.display_name;
+            if (els.profileNameMobile)
+                els.profileNameMobile.textContent = state.user.display_name;
+            if (els.lobbyMeName) els.lobbyMeName.textContent = state.user.display_name;
+            syncProfileElo(state.user.elo);
             warmFriendsCache();
+            if (state.screen === 'play') applyBoardLabels();
         } else {
             els.authPanel?.classList.remove('hide');
             els.profileChip?.classList.add('hide');
             els.profileChipMobile?.classList.add('hide');
             els.btnLogout?.classList.add('hide');
             els.btnLogoutMobile?.classList.add('hide');
+            els.lobbyMe?.classList.add('hide');
+            els.lobbyFriends?.classList.add('hide');
+            if (els.lobbyFriendsList) els.lobbyFriendsList.innerHTML = '';
             queryClient?.clear();
             updateFriendsBadge(0);
+        }
+    }
+
+    function buildProfileKitGrid(selected) {
+        if (!els.profileKitGrid) return;
+        const sel = normalizeKit(selected) || 1;
+        state.profileDraftKit = sel;
+        let html = '';
+        for (let i = 1; i <= 99; i++) {
+            html += `<button type="button" class="kit-pick${
+                i === sel ? ' is-selected' : ''
+            }" data-kit="${i}" role="option" aria-selected="${
+                i === sel ? 'true' : 'false'
+            }">${i}</button>`;
+        }
+        els.profileKitGrid.innerHTML = html;
+        if (els.profileKitPreview) els.profileKitPreview.textContent = String(sel);
+    }
+
+    function syncProfileFormPreview() {
+        const name = (els.profileDisplayName?.value || '').trim() || '—';
+        if (els.profileFormNamePreview) els.profileFormNamePreview.textContent = name;
+        const kit = normalizeKit(state.profileDraftKit);
+        if (els.profileKitPreview) {
+            els.profileKitPreview.textContent = kit != null ? String(kit) : '—';
+        }
+    }
+
+    function openProfile() {
+        showScreen('profile');
+        if (!state.user) {
+            els.profileGuest?.classList.remove('hide');
+            els.profileForm?.classList.add('hide');
+            return;
+        }
+        els.profileGuest?.classList.add('hide');
+        els.profileForm?.classList.remove('hide');
+        if (els.profileDisplayName) {
+            els.profileDisplayName.value = state.user.display_name || '';
+        }
+        buildProfileKitGrid(state.user.kit_number || 1);
+        syncProfileFormPreview();
+        if (els.profileTelegramHint) {
+            const tg = state.user.username
+                ? `@${state.user.username}`
+                : state.user.telegram_id
+                  ? `Telegram #${state.user.telegram_id}`
+                  : 'Telegram linked';
+            els.profileTelegramHint.textContent = `Login account: ${tg} (unchanged)`;
+        }
+    }
+
+    async function saveProfile(e) {
+        e?.preventDefault?.();
+        if (!state.user) {
+            showToast('Log in first', 'info');
+            return;
+        }
+        const display_name = (els.profileDisplayName?.value || '').trim();
+        const kit_number = normalizeKit(state.profileDraftKit);
+        if (display_name.length < 2) {
+            showToast('Name must be at least 2 characters', 'error');
+            return;
+        }
+        if (kit_number == null) {
+            showToast('Pick a kit number 1–99', 'error');
+            return;
+        }
+        if (els.btnProfileSave) els.btnProfileSave.disabled = true;
+        try {
+            const res = await fetch('/api/me', {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ display_name, kit_number }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.user) {
+                showToast(data.error || 'Could not save', 'error');
+                return;
+            }
+            setLoggedInUI({
+                ...state.user,
+                ...data.user,
+            });
+            socket.emit('sessionHello', { sessionId });
+            showToast('Profile saved', 'info');
+        } catch {
+            showToast('Network error', 'error');
+        } finally {
+            if (els.btnProfileSave) els.btnProfileSave.disabled = false;
         }
     }
 
@@ -1493,15 +1673,59 @@
 
     function warmFriendsCache() {
         if (!state.user || !queryClient) return;
-        void ensureFriendsLoaded().catch(() => {
-            /* ignore warm errors */
+        void ensureFriendsLoaded()
+            .then(() => renderLobbyFriends(getFriendsData().accepted || []))
+            .catch(() => {
+                /* ignore warm errors */
+            });
+    }
+
+    function renderLobbyFriends(list) {
+        if (!els.lobbyFriendsList) return;
+        if (!state.user) {
+            els.lobbyFriendsList.innerHTML = '';
+            return;
+        }
+        if (!list.length) {
+            els.lobbyFriendsList.innerHTML =
+                '<p class="friends-empty">No friends yet — open Friends to add some</p>';
+            return;
+        }
+        const sorted = [...list].sort((a, b) => {
+            const ao = a.online ? 1 : 0;
+            const bo = b.online ? 1 : 0;
+            if (bo !== ao) return bo - ao;
+            return friendDisplayName(a.friend).localeCompare(
+                friendDisplayName(b.friend)
+            );
         });
+        els.lobbyFriendsList.innerHTML = sorted
+            .map((item) => {
+                const fid = item.friend?.id || '';
+                return `<div class="friends-row" data-friend-user-id="${escapeHtml(
+                    fid
+                )}">
+                <div class="friends-row-main">
+                    <span class="font-medium truncate">${escapeHtml(
+                        friendDisplayName(item.friend)
+                    )}</span>
+                    ${presenceLabel(item.online)}
+                </div>
+                <div class="friends-row-actions">
+                    <button type="button" class="friends-btn play" data-friend-invite="${escapeHtml(
+                        fid
+                    )}">Invite</button>
+                </div>
+            </div>`;
+            })
+            .join('');
     }
 
     function renderFriendsFromCache() {
         const data = getFriendsData();
         renderFriendsPending(data);
         renderFriendsAccepted(data.accepted || []);
+        renderLobbyFriends(data.accepted || []);
         updateFriendsBadge();
     }
 
@@ -1535,7 +1759,10 @@
         try {
             await ensureFriendsLoaded({ force });
             if (state.screen === 'friends') renderFriendsFromCache();
-            else updateFriendsBadge();
+            else {
+                renderLobbyFriends(getFriendsData().accepted || []);
+                updateFriendsBadge();
+            }
         } catch (err) {
             if (state.screen === 'friends') {
                 els.friendsPending.innerHTML = `<p class="friends-empty">${
@@ -1557,7 +1784,10 @@
             });
         });
         if (state.screen === 'friends') renderFriendsFromCache();
-        else updateFriendsBadge();
+        else {
+            renderLobbyFriends(getFriendsData().accepted || []);
+            updateFriendsBadge();
+        }
     }
 
     function renderFriendsPending(data) {
@@ -1720,10 +1950,22 @@
         state.lastP2History = detail.playerTwoHistory || [];
 
         if (els.histP1Label) {
-            els.histP1Label.textContent = detail.playerOneName || 'You';
+            if (detail.playerOneSecret) {
+                setNameLabel(els.histP1Label, detail.playerOneSecret, {
+                    secret: true,
+                });
+            } else {
+                setNameLabel(els.histP1Label, detail.playerOneName || 'You');
+            }
         }
         if (els.histP2Label) {
-            els.histP2Label.textContent = detail.playerTwoName || 'Opponent';
+            if (detail.playerTwoSecret) {
+                setNameLabel(els.histP2Label, detail.playerTwoSecret, {
+                    secret: true,
+                });
+            } else {
+                setNameLabel(els.histP2Label, detail.playerTwoName || 'Opponent');
+            }
         }
 
         const leftHist = state.lastP1History;
@@ -1941,6 +2183,21 @@
     els.friendsSearchInput?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') searchFriends();
     });
+    function inviteFriendToPlay(userId) {
+        if (!userId) return;
+        if (inLivePlay() || inSetupMatch() || state.cupId) {
+            showToast('Leave your current game or cup first', 'info');
+            return;
+        }
+        socket.emit('friendPlayInvite', { userId, sessionId });
+    }
+
+    els.lobbyFriendsList?.addEventListener('click', (e) => {
+        const invite = e.target.closest('[data-friend-invite]');
+        if (!invite || invite.disabled) return;
+        inviteFriendToPlay(invite.getAttribute('data-friend-invite'));
+    });
+
     const friendsClickRoot = document.getElementById('screen-friends');
     friendsClickRoot?.addEventListener('click', async (e) => {
         const add = e.target.closest('[data-friend-add]');
@@ -2012,13 +2269,7 @@
         }
         const invite = e.target.closest('[data-friend-invite]');
         if (invite) {
-            const userId = invite.getAttribute('data-friend-invite');
-            if (!userId) return;
-            if (inLivePlay() || inSetupMatch() || state.cupId) {
-                showToast('Leave your current game or cup first', 'info');
-                return;
-            }
-            socket.emit('friendPlayInvite', { userId, sessionId });
+            inviteFriendToPlay(invite.getAttribute('data-friend-invite'));
         }
     });
     els.btnFriendInviteAccept?.addEventListener('click', () => {
@@ -2087,6 +2338,27 @@
     els.navCups?.addEventListener('click', () => goNavCups());
     els.navFriends?.addEventListener('click', () => goNavFriends());
     els.navHistory?.addEventListener('click', () => goNavHistory());
+    els.navRules?.addEventListener('click', () => showScreen('rules'));
+    els.navProfile?.addEventListener('click', () => openProfile());
+    els.btnRulesBack?.addEventListener('click', () => goNavPlay());
+    els.btnProfileBack?.addEventListener('click', () => goNavPlay());
+    els.profileChip?.addEventListener('click', () => openProfile());
+    els.profileChipMobile?.addEventListener('click', () => openProfile());
+    els.profileForm?.addEventListener('submit', (e) => saveProfile(e));
+    els.profileDisplayName?.addEventListener('input', () => syncProfileFormPreview());
+    els.profileKitGrid?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-kit]');
+        if (!btn) return;
+        const kit = normalizeKit(btn.getAttribute('data-kit'));
+        if (kit == null) return;
+        state.profileDraftKit = kit;
+        els.profileKitGrid.querySelectorAll('.kit-pick').forEach((el) => {
+            const on = normalizeKit(el.getAttribute('data-kit')) === kit;
+            el.classList.toggle('is-selected', on);
+            el.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        syncProfileFormPreview();
+    });
     els.navBrand?.addEventListener('click', (e) => {
         e.preventDefault();
         goNavPlay();
@@ -2172,15 +2444,17 @@
             if (state.gameEnded) els.guessInput.value = '';
             return;
         }
-        if (!state.canAddGuess) {
-            els.guessInput.value = '';
-            showToast('Wait for your opponent to guess', 'error');
-            return;
-        }
-        const next = filterDigitInput(els.guessInput.value, els.guessInput.dataset.last || '');
+        // While waiting: allow up to 3 digits to brainstorm; 4th only on your turn (auto-submits)
+        const maxLen = state.canAddGuess ? 4 : 3;
+        const prev = els.guessInput.dataset.last || '';
+        const rawDigits = String(els.guessInput.value).replace(/\D/g, '');
+        const next = filterDigitInput(els.guessInput.value, prev, maxLen);
         els.guessInput.value = next;
         els.guessInput.dataset.last = next;
-        if (next.length === 4) {
+        if (!state.canAddGuess && rawDigits.length > 3 && next.length === 3) {
+            showToast('Wait for opponent — then add the 4th digit', 'info');
+        }
+        if (state.canAddGuess && next.length === 4) {
             submitGuess(next);
         }
     });
@@ -2281,6 +2555,7 @@
         state.playerName = msg.playerName;
         state.vsAI = false;
         state.opponentName = msg.opponentName || null;
+        state.opponentKit = msg.opponentKit ?? null;
         state.secret = null;
         state.secretLocked = false;
         state.gameEnded = false;
@@ -2311,13 +2586,10 @@
     socket.on('cupMatchUpdate', (msg) => {
         if (!state.spectating) return;
         if (!msg?.matchId || msg.matchId !== state.spectateMatchId) return;
-        applyBoardLabels({
-            p1Name: msg.playerOneName || 'Player One',
-            p2Name: msg.playerTwoName || 'Player Two',
-        });
         if (msg.status === 'done') {
             if (msg.playerOneSecret) state.reviewP1Secret = msg.playerOneSecret;
             if (msg.playerTwoSecret) state.reviewP2Secret = msg.playerTwoSecret;
+            state.highlightGuesses = true;
             markSpectateMatchEnded({
                 winnerName: msg.winnerName || null,
                 label: msg.label || 'Match',
@@ -2326,6 +2598,10 @@
             els.playEloLine.textContent = 'Live view · read only';
             els.playEloLine.classList.remove('hide');
         }
+        applyBoardLabels({
+            p1Name: msg.playerOneName || 'Player One',
+            p2Name: msg.playerTwoName || 'Player Two',
+        });
         renderResults(msg.playerOneHistory || [], msg.playerTwoHistory || []);
     });
 
@@ -2352,9 +2628,11 @@
 
     socket.on('authed', (msg) => {
         setLoggedInUI({
+            ...(state.user || {}),
             id: msg.id,
             display_name: msg.display_name,
             elo: msg.elo,
+            kit_number: msg.kit_number ?? state.user?.kit_number ?? null,
             ai_elo: msg.ai_elo,
         });
         if (msg.ai_elo && els.aiEloHint) {
@@ -2367,6 +2645,7 @@
         state.playerName = msg.playerName;
         state.vsAI = true;
         state.opponentName = 'AI';
+        state.opponentKit = null;
         state.gameEnded = false;
         const eng = msg.engine === 'neural' ? 'trained model' : 'heuristic AI';
         const eloBit = msg.aiElo != null ? ` · ${msg.aiElo} Elo` : '';
@@ -2375,6 +2654,7 @@
 
     socket.on('opponentJoined', (msg) => {
         if (msg?.opponentName) state.opponentName = msg.opponentName;
+        if (msg?.opponentKit != null) state.opponentKit = msg.opponentKit;
         const name = state.opponentName || 'Opponent';
         if (msg?.message) showToast(msg.message, 'info');
         goToSecretScreen(`${name} joined — set your secret number`);
@@ -2385,6 +2665,7 @@
         state.playerName = msg.playerName;
         state.vsAI = false;
         if (msg?.opponentName) state.opponentName = msg.opponentName;
+        if (msg?.opponentKit != null) state.opponentKit = msg.opponentKit;
         const vs = state.opponentName ? ` vs ${state.opponentName}` : '';
         goToSecretScreen(`Joined${vs} — set your secret number`);
     });
@@ -2396,6 +2677,7 @@
         state.playerName = msg.playerName;
         state.vsAI = false;
         if (msg?.opponentName) state.opponentName = msg.opponentName;
+        if (msg?.opponentKit != null) state.opponentKit = msg.opponentKit;
         state.secret = null;
         state.secretLocked = false;
         state.gameEnded = false;
@@ -2447,10 +2729,21 @@
         if (state.canAddGuess) {
             els.playStatus.textContent = 'Your turn';
             startMyTimer(msg.turnMsRemaining);
-            els.guessInput.focus();
+            // Keep brainstormed digits; 4th digit will submit
+            if ((els.guessInput.value || '').length === 4) {
+                submitGuess(els.guessInput.value);
+            } else {
+                els.guessInput.focus();
+            }
         } else {
             els.playStatus.textContent = 'Waiting for opponent…';
             stopMyTimer();
+            // Cap any leftover 4th digit if somehow present
+            if ((els.guessInput.value || '').length > 3) {
+                const capped = filterDigitInput(els.guessInput.value, '', 3);
+                els.guessInput.value = capped;
+                els.guessInput.dataset.last = capped;
+            }
         }
     });
 

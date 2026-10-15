@@ -2,14 +2,16 @@
  * ATP Telegram auth bot — run separately from the game server:
  *   node bot.js
  *
- * Requires TELEGRAM_BOT_TOKEN, BOT_API_SECRET, APP_PUBLIC_URL in .env
+ * Requires TELEGRAM_BOT_TOKEN, BOT_API_SECRET in .env
+ * Uses APP_PUBLIC_URL (or host platform URL) — localhost only when that is the env.
  */
 import 'dotenv/config';
 import { Telegraf, Markup } from 'telegraf';
+import { getAppPublicUrl, isLocalhostUrl } from './appPublicUrl.js';
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const botSecret = process.env.BOT_API_SECRET;
-const appUrl = (process.env.APP_PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, '');
+const appUrl = getAppPublicUrl();
 
 if (!token) {
     console.error('Missing TELEGRAM_BOT_TOKEN in .env');
@@ -92,7 +94,7 @@ bot.on('contact', async (ctx) => {
 
         // Telegram rejects localhost / private IPs on inline URL buttons.
         const isLocal =
-            /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(data.url) ||
+            isLocalhostUrl(data.url) ||
             data.url.startsWith('http://192.168.') ||
             data.url.startsWith('http://10.');
 
