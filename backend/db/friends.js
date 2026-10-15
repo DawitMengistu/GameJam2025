@@ -203,5 +203,5 @@ export async function listAcceptedFriendIds(userId) {
         WHERE status = 'accepted'
           AND (requester_id = ${userId} OR addressee_id = ${userId})
     `;
-    return rows.map((r) => r.friend_id);
+    return rows.map((r) => String(r.friend_id));
 }

@@ -35,9 +35,14 @@ export function broadcastUserCount(io) {
     io.emit('usercount', liveSocketCount(io));
 }
 
+function normUserId(userId) {
+    return userId == null || userId === '' ? null : String(userId);
+}
+
 export function isUserOnline(userId) {
-    if (!userId) return false;
-    const set = onlineByUser.get(userId);
+    const id = normUserId(userId);
+    if (!id) return false;
+    const set = onlineByUser.get(id);
     return Boolean(set && set.size > 0);
 }
 
@@ -45,21 +50,26 @@ export function getOnlineUserIds(userIds) {
     /** @type {Record<string, boolean>} */
     const out = {};
     for (const id of userIds || []) {
-        out[id] = isUserOnline(id);
+        const key = normUserId(id);
+        if (key) out[key] = isUserOnline(key);
     }
     return out;
 }
 
 /** Latest socket for a logged-in user (any of their tabs). */
 export function getSocketIdForUser(userId) {
-    const set = onlineByUser.get(userId);
+    const id = normUserId(userId);
+    if (!id) return null;
+    const set = onlineByUser.get(id);
     if (!set || set.size === 0) return null;
     return [...set][set.size - 1];
 }
 
 /** All connected socket ids for a logged-in user (multi-tab). */
 export function getSocketIdsForUser(userId) {
-    const set = onlineByUser.get(userId);
+    const id = normUserId(userId);
+    if (!id) return [];
+    const set = onlineByUser.get(id);
     if (!set || set.size === 0) return [];
     return [...set];
 }
@@ -68,15 +78,16 @@ export function getSocketIdForSession(sessionId) {
     return sessionId ? socketBySession.get(sessionId) || null : null;
 }
 
-function schedulePresenceNotify(userId, online) {
-    if (!onPresenceChange || !userId) return;
-    const prev = presenceFlushTimers.get(userId);
+function schedulePresenceNotify(userId) {
+    const id = normUserId(userId);
+    if (!onPresenceChange || !id) return;
+    const prev = presenceFlushTimers.get(id);
     if (prev) clearTimeout(prev);
     const t = setTimeout(() => {
-        presenceFlushTimers.delete(userId);
-        onPresenceChange(userId, isUserOnline(userId));
+        presenceFlushTimers.delete(id);
+        onPresenceChange(id, isUserOnline(id));
     }, 300);
-    presenceFlushTimers.set(userId, t);
+    presenceFlushTimers.set(id, t);
 }
 
 export function bindSessionSocket(sessionId, socketId) {
@@ -90,16 +101,17 @@ export function bindSessionSocket(sessionId, socketId) {
 }
 
 export function markUserOnline(userId, socketId) {
-    if (!userId || !socketId) return;
-    const wasOnline = isUserOnline(userId);
-    let set = onlineByUser.get(userId);
+    const id = normUserId(userId);
+    if (!id || !socketId) return;
+    const wasOnline = isUserOnline(id);
+    let set = onlineByUser.get(id);
     if (!set) {
         set = new Set();
-        onlineByUser.set(userId, set);
+        onlineByUser.set(id, set);
     }
     set.add(socketId);
-    userBySocket.set(socketId, userId);
-    if (!wasOnline) schedulePresenceNotify(userId, true);
+    userBySocket.set(socketId, id);
+    if (!wasOnline) schedulePresenceNotify(id);
 }
 
 export function clearSocketPresence(socketId) {
@@ -120,6 +132,6 @@ export function clearSocketPresence(socketId) {
     set.delete(socketId);
     if (set.size === 0) {
         onlineByUser.delete(userId);
-        schedulePresenceNotify(userId, false);
+        schedulePresenceNotify(userId);
     }
 }

@@ -189,6 +189,9 @@ router.get('/friends', dbRequired, requireUser, async (req, res) => {
         const withOnline = (items) =>
             items.map((item) => ({
                 ...item,
+                friend: item.friend
+                    ? { ...item.friend, id: String(item.friend.id) }
+                    : item.friend,
                 online: isUserOnline(item.friend?.id),
             }));
         return res.json({
@@ -209,6 +212,7 @@ router.get('/friends/search', dbRequired, requireUser, async (req, res) => {
         return res.json({
             users: users.map((u) => ({
                 ...u,
+                id: String(u.id),
                 online: isUserOnline(u.id),
             })),
         });

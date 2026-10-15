@@ -35,7 +35,7 @@ import {
     bindSessionSocket,
     broadcastUserCount,
     clearSocketPresence,
-    getSocketIdForUser,
+    getSocketIdsForUser,
     isUserOnline,
     markUserOnline,
     setPresenceChangeHandler,
@@ -1129,10 +1129,10 @@ setPresenceChangeHandler((userId, online) => {
         if (!isDbConfigured() || !userId) return;
         try {
             const friendIds = await listAcceptedFriendIds(userId);
+            const payload = { userId: String(userId), online: Boolean(online) };
             for (const friendId of friendIds) {
-                const sid = getSocketIdForUser(friendId);
-                if (sid) {
-                    io.to(sid).emit('friendsPresence', { userId, online });
+                for (const sid of getSocketIdsForUser(friendId)) {
+                    io.to(sid).emit('friendsPresence', payload);
                 }
             }
         } catch (err) {
@@ -1893,11 +1893,15 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const friendSocketId = getSocketIdForUser(friendUserId);
-        const friendSocket = friendSocketId
-            ? io.sockets.sockets.get(friendSocketId)
-            : null;
-        if (!friendSocket?.data?.sessionId) {
+        let friendSocket = null;
+        for (const sid of getSocketIdsForUser(friendUserId)) {
+            const s = io.sockets.sockets.get(sid);
+            if (s?.data?.sessionId) {
+                friendSocket = s;
+                break;
+            }
+        }
+        if (!friendSocket) {
             socket.emit('friendPlayInviteResult', {
                 ok: false,
                 reason: 'offline',

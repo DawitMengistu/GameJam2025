@@ -1518,7 +1518,8 @@
                 '<p class="friends-empty">Loading…</p>';
         }
         try {
-            await ensureFriendsLoaded();
+            // Always refetch on open so Online/Offline matches presence
+            await ensureFriendsLoaded({ force: true });
             renderFriendsFromCache();
         } catch (err) {
             if (!cached) {
@@ -2559,20 +2560,26 @@
         syncUserCount(count);
     });
 
+    function sameUserId(a, b) {
+        if (a == null || b == null) return false;
+        return String(a) === String(b);
+    }
+
     socket.on('friendsPresence', (msg) => {
         if (!msg?.userId) return;
         const online = Boolean(msg.online);
+        const uid = String(msg.userId);
         patchFriendsCache((data) => {
             for (const list of [data.accepted, data.pendingIn, data.pendingOut]) {
                 for (const item of list) {
-                    if (item.friend?.id === msg.userId) item.online = online;
+                    if (sameUserId(item.friend?.id, uid)) item.online = online;
                 }
             }
             return data;
         });
         if (state.screen !== 'friends') return;
         const row = els.friendsAccepted?.querySelector(
-            `[data-friend-user-id="${msg.userId}"]`
+            `[data-friend-user-id="${CSS.escape(uid)}"]`
         );
         if (!row) return;
         const chip = row.querySelector('.friends-presence');
@@ -2598,7 +2605,7 @@
                         display_name: msg.from.display_name,
                         username: msg.from.username || null,
                     },
-                    online: true,
+                    online: false,
                 });
                 return data;
             });
@@ -2631,15 +2638,15 @@
                 // Skip if payload points at self (accepter also gets this event).
                 if (
                     friend?.id &&
-                    friend.id !== state.user?.id &&
-                    !data.accepted.some((a) => a.friend?.id === friend.id)
+                    !sameUserId(friend.id, state.user?.id) &&
+                    !data.accepted.some((a) => sameUserId(a.friend?.id, friend.id))
                 ) {
                     data.accepted.unshift({
                         id: msg.friendshipId,
                         status: 'accepted',
                         direction: 'out',
                         friend,
-                        online: true,
+                        online: false,
                     });
                 }
                 return data;
@@ -2650,13 +2657,18 @@
             data.pendingOut = pull(data.pendingOut);
             if (status === 'removed' && msg.friendId) {
                 data.accepted = data.accepted.filter(
-                    (a) => a.friend?.id !== msg.friendId && a.id !== msg.friendshipId
+                    (a) =>
+                        !sameUserId(a.friend?.id, msg.friendId) &&
+                        a.id !== msg.friendshipId
                 );
             } else {
                 data.accepted = pull(data.accepted);
             }
             return data;
         });
+        if (status === 'accepted') {
+            void refreshFriendsLists({ force: true });
+        }
     });
 
     socket.on('friendPlayInvite', (msg) => {
