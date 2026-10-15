@@ -66,36 +66,33 @@ export async function listFriendshipsForUser(userId) {
     return { accepted, pendingIn, pendingOut };
 }
 
-export async function searchUsers(userId, query, limit = 12) {
-    const sql = requireSql();
-    const q = String(query || '')
+export function normalizeFriendCode(raw) {
+    return String(raw || '')
         .trim()
-        .replace(/^@/, '')
-        .slice(0, 40);
-    if (q.length < 2) return [];
+        .replace(/\s+/g, '')
+        .replace(/[^0-9]/g, '')
+        .slice(0, 8);
+}
 
-    const pattern = `%${q}%`;
-    return sql`
-        SELECT u.id, u.display_name, u.username, u.elo
+export async function findUserByFriendCode(userId, friendCode) {
+    const sql = requireSql();
+    const code = normalizeFriendCode(friendCode);
+    if (!/^\d{8}$/.test(code)) return null;
+
+    const rows = await sql`
+        SELECT u.id, u.display_name, u.username, u.elo, u.friend_code
         FROM users u
-        WHERE u.id <> ${userId}
-          AND (
-            u.username ILIKE ${pattern}
-            OR u.display_name ILIKE ${pattern}
-          )
-          AND NOT EXISTS (
-            SELECT 1 FROM friendships f
-            WHERE f.status IN ('pending', 'accepted')
-              AND (
-                (f.requester_id = ${userId} AND f.addressee_id = u.id)
-                OR (f.addressee_id = ${userId} AND f.requester_id = u.id)
-              )
-          )
-        ORDER BY
-          CASE WHEN lower(u.username) = lower(${q}) THEN 0 ELSE 1 END,
-          u.display_name ASC
-        LIMIT ${limit}
+        WHERE u.friend_code = ${code}
+          AND u.id <> ${userId}
+        LIMIT 1
     `;
+    return rows[0] ?? null;
+}
+
+/** @deprecated name search removed — use findUserByFriendCode */
+export async function searchUsers(userId, query) {
+    const user = await findUserByFriendCode(userId, query);
+    return user ? [user] : [];
 }
 
 const RUTH_ONLY_FRIEND_USERNAME = 'ruth_abiti';

@@ -317,15 +317,27 @@
                 <div
                     class="w-full max-w-lg mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-6 sm:p-8 text-left">
                     <h2 class="text-xl font-semibold m-0 mb-1">Friends</h2>
-                    <p class="text-sm text-muted m-0 mb-4">Add friends and see who’s online</p>
+                    <p class="text-sm text-muted m-0 mb-4">Share your friend ID — friends add you by number, not name</p>
+
+                    <div id="my-friend-code-card"
+                        class="mb-4 rounded-xl border border-ink/10 dark:border-white/10 bg-page dark:bg-[#12151a] px-3.5 py-3 flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="m-0 text-xs text-muted uppercase tracking-wide">Your friend ID</p>
+                            <p class="m-0 mt-0.5 text-lg font-semibold tracking-[0.18em] tabular-nums" id="my-friend-code">————</p>
+                        </div>
+                        <button type="button" id="btn-copy-friend-code"
+                            class="shrink-0 rounded-xl px-3 py-2 text-sm font-medium text-white bg-green-main hover:bg-green-hovered transition-colors">
+                            Copy
+                        </button>
+                    </div>
 
                     <div class="join-row grid grid-cols-[1fr_auto] gap-2 mb-4">
-                        <input type="text" id="friends-search-input"
-                            class="field-input w-full rounded-xl border-2 border-[#d5d8d0] dark:border-white/20 focus:border-green-main outline-none px-3.5 py-3 bg-white dark:bg-[#12151a] dark:text-[#e8ece4]"
-                            placeholder="Search username or name" maxlength="40" autocomplete="off">
+                        <input type="text" id="friends-search-input" inputmode="numeric" pattern="[0-9]*"
+                            class="field-input w-full rounded-xl border-2 border-[#d5d8d0] dark:border-white/20 focus:border-green-main outline-none px-3.5 py-3 bg-white dark:bg-[#12151a] dark:text-[#e8ece4] tracking-[0.18em] tabular-nums"
+                            placeholder="8-digit friend ID" maxlength="8" autocomplete="off">
                         <button type="button" id="btn-friends-search"
                             class="rounded-xl px-4 py-3 font-medium text-white bg-blue-main hover:bg-blue-hovered transition-colors">
-                            Search
+                            Add
                         </button>
                     </div>
                     <div id="friends-search-results" class="friends-list mb-5"></div>
@@ -419,6 +431,12 @@
                                 class="field-input w-full rounded-xl border-2 border-[#d5d8d0] dark:border-white/20 focus:border-green-main outline-none px-3.5 py-3 bg-white dark:bg-[#12151a] dark:text-[#e8ece4]"
                                 placeholder="Your name in ATP">
                         </label>
+
+                        <div class="rounded-xl border border-ink/10 dark:border-white/10 bg-page dark:bg-[#12151a] px-3.5 py-3">
+                            <p class="m-0 text-xs text-muted uppercase tracking-wide">Friend ID</p>
+                            <p class="m-0 mt-0.5 text-base font-semibold tracking-[0.18em] tabular-nums" id="profile-friend-code">————</p>
+                            <p class="m-0 mt-1 text-xs text-muted">Friends need this 8-digit ID to add you</p>
+                        </div>
 
                         <p class="m-0 text-xs text-muted" id="profile-telegram-hint"></p>
 

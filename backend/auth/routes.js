@@ -13,6 +13,8 @@ import {
     deleteFriendship,
     listFriendshipsForUser,
     respondFriendRequest,
+    findUserByFriendCode,
+    normalizeFriendCode,
     searchUsers,
 } from '../db/friends.js';
 import { isUserOnline } from '../presence.js';
@@ -110,6 +112,7 @@ router.post('/auth/consume', dbRequired, async (req, res) => {
                 display_name: result.user.display_name,
                 username: result.user.username,
                 elo: result.user.elo,
+                friend_code: result.user.friend_code || null,
             },
         });
     } catch (err) {
@@ -124,6 +127,7 @@ router.get('/me', dbRequired, requireUser, (req, res) => {
         display_name: req.user.display_name,
         username: req.user.username,
         elo: req.user.elo,
+        friend_code: req.user.friend_code || null,
         telegram_id: req.user.telegram_id ?? null,
         ai_elo: AI_DEFAULT_ELO,
         elo_start: ELO_START,
@@ -146,6 +150,7 @@ router.patch('/me', dbRequired, requireUser, async (req, res) => {
                 display_name: result.user.display_name,
                 username: result.user.username,
                 elo: result.user.elo,
+                friend_code: result.user.friend_code || null,
                 telegram_id: result.user.telegram_id ?? null,
             },
         });
@@ -234,12 +239,21 @@ router.get('/friends', dbRequired, requireUser, async (req, res) => {
 
 router.get('/friends/search', dbRequired, requireUser, async (req, res) => {
     try {
-        const q = String(req.query?.q ?? '');
+        const q = normalizeFriendCode(req.query?.q ?? '');
+        if (!/^\d{8}$/.test(q)) {
+            return res.status(400).json({
+                error: 'Enter an 8-digit friend ID',
+                users: [],
+            });
+        }
         const users = await searchUsers(req.user.id, q);
         return res.json({
             users: users.map((u) => ({
-                ...u,
                 id: String(u.id),
+                display_name: u.display_name,
+                username: u.username,
+                elo: u.elo,
+                friend_code: u.friend_code,
                 online: isUserOnline(u.id),
             })),
         });
@@ -251,8 +265,23 @@ router.get('/friends/search', dbRequired, requireUser, async (req, res) => {
 
 router.post('/friends/request', dbRequired, requireUser, async (req, res) => {
     try {
-        const userId = String(req.body?.userId ?? '').trim();
-        if (!userId) return res.status(400).json({ error: 'userId required' });
+        let userId = String(req.body?.userId ?? '').trim();
+        const friendCode = normalizeFriendCode(req.body?.friendCode ?? '');
+
+        if (!userId && friendCode) {
+            if (!/^\d{8}$/.test(friendCode)) {
+                return res.status(400).json({ error: 'Enter an 8-digit friend ID' });
+            }
+            const target = await findUserByFriendCode(req.user.id, friendCode);
+            if (!target) {
+                return res.status(404).json({ error: 'No player with that friend ID' });
+            }
+            userId = String(target.id);
+        }
+
+        if (!userId) {
+            return res.status(400).json({ error: 'Friend ID required' });
+        }
         const result = await createFriendRequest(req.user.id, userId);
         if (!result.ok) return res.status(400).json({ error: result.reason });
 

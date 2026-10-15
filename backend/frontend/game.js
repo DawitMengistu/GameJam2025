@@ -131,6 +131,9 @@
         friendsSearchInput: document.getElementById('friends-search-input'),
         btnFriendsSearch: document.getElementById('btn-friends-search'),
         friendsSearchResults: document.getElementById('friends-search-results'),
+        myFriendCode: document.getElementById('my-friend-code'),
+        btnCopyFriendCode: document.getElementById('btn-copy-friend-code'),
+        profileFriendCode: document.getElementById('profile-friend-code'),
         friendsPending: document.getElementById('friends-pending'),
         friendsAccepted: document.getElementById('friends-accepted'),
         friendInviteBar: document.getElementById('friend-invite-bar'),
@@ -1460,6 +1463,7 @@
                 els.profileNameMobile.textContent = state.user.display_name;
             if (els.lobbyMeName) els.lobbyMeName.textContent = state.user.display_name;
             syncProfileElo(state.user.elo);
+            syncFriendCodeUi();
             warmFriendsCache();
             warmHistoryCache();
             if (state.screen === 'play') applyBoardLabels();
@@ -1490,6 +1494,10 @@
         if (els.profileDisplayName) {
             els.profileDisplayName.value = state.user.display_name || '';
         }
+        if (els.profileFriendCode) {
+            els.profileFriendCode.textContent =
+                state.user.friend_code || '————';
+        }
         if (els.profileTelegramHint) {
             const tg = state.user.username
                 ? `@${state.user.username}`
@@ -1498,6 +1506,12 @@
                   : 'Telegram linked';
             els.profileTelegramHint.textContent = `Login account: ${tg} (unchanged)`;
         }
+    }
+
+    function syncFriendCodeUi() {
+        const code = state.user?.friend_code || '————';
+        if (els.myFriendCode) els.myFriendCode.textContent = code;
+        if (els.profileFriendCode) els.profileFriendCode.textContent = code;
     }
 
     async function saveProfile(e) {
@@ -1678,6 +1692,7 @@
     async function openFriends() {
         if (!requireAuth('Log in with Telegram to use Friends')) return;
         showScreen('friends');
+        syncFriendCodeUi();
         const cached = queryClient?.getQueryData(FRIENDS_QUERY_KEY);
         if (cached) {
             renderFriendsFromCache();
@@ -1819,51 +1834,68 @@
             .join('');
     }
 
-    async function searchFriends() {
-        const q = (els.friendsSearchInput?.value || '').trim();
-        if (q.length < 2) {
-            showToast('Type at least 2 characters', 'info');
+    function normalizeFriendCodeInput(raw) {
+        return String(raw || '')
+            .replace(/\D/g, '')
+            .slice(0, 8);
+    }
+
+    async function addFriendByCode() {
+        const friendCode = normalizeFriendCodeInput(
+            els.friendsSearchInput?.value
+        );
+        if (els.friendsSearchInput) els.friendsSearchInput.value = friendCode;
+        if (friendCode.length !== 8) {
+            showToast('Enter an 8-digit friend ID', 'info');
             return;
         }
-        els.friendsSearchResults.innerHTML =
-            '<p class="friends-empty">Searching…</p>';
+        if (friendCode === state.user?.friend_code) {
+            showToast('That is your own friend ID', 'info');
+            return;
+        }
+        if (els.friendsSearchResults) {
+            els.friendsSearchResults.innerHTML =
+                '<p class="friends-empty">Sending request…</p>';
+        }
         try {
-            const res = await fetch(
-                `/api/friends/search?q=${encodeURIComponent(q)}`,
-                { credentials: 'include' }
-            );
+            const res = await fetch('/api/friends/request', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ friendCode }),
+            });
             const data = await res.json();
             if (!res.ok) {
-                els.friendsSearchResults.innerHTML = `<p class="friends-empty">${
-                    data.error || 'Failed'
-                }</p>`;
+                if (els.friendsSearchResults) {
+                    els.friendsSearchResults.innerHTML = '';
+                }
+                showToast(data.error || 'Could not send request', 'error');
                 return;
             }
-            if (!data.users?.length) {
-                els.friendsSearchResults.innerHTML =
-                    '<p class="friends-empty">No users found</p>';
-                return;
-            }
-            els.friendsSearchResults.innerHTML = data.users
-                .map(
-                    (u) => `<div class="friends-row">
-                <div class="friends-row-main">
-                    <span class="font-medium truncate">${escapeHtml(
-                        friendDisplayName(u)
-                    )}</span>
-                    ${presenceLabel(u.online)}
-                </div>
-                <div class="friends-row-actions">
-                    <button type="button" class="friends-btn" data-friend-add="${escapeHtml(
-                        u.id
-                    )}">Add</button>
-                </div>
-            </div>`
-                )
-                .join('');
+            showToast('Friend request sent', 'info');
+            if (els.friendsSearchInput) els.friendsSearchInput.value = '';
+            if (els.friendsSearchResults) els.friendsSearchResults.innerHTML = '';
+            await refreshFriendsLists();
         } catch {
-            els.friendsSearchResults.innerHTML =
-                '<p class="friends-empty">Network error</p>';
+            if (els.friendsSearchResults) {
+                els.friendsSearchResults.innerHTML =
+                    '<p class="friends-empty">Network error</p>';
+            }
+            showToast('Network error', 'error');
+        }
+    }
+
+    async function copyMyFriendCode() {
+        const code = state.user?.friend_code;
+        if (!code) {
+            showToast('No friend ID yet', 'info');
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(code);
+            showToast('Friend ID copied', 'info');
+        } catch {
+            showToast('Could not copy — select the ID manually', 'error');
         }
     }
 
@@ -2177,9 +2209,16 @@
         openHistoryDetail(row.getAttribute('data-history-id'));
     });
     els.btnFriendsBack?.addEventListener('click', () => showScreen('lobby'));
-    els.btnFriendsSearch?.addEventListener('click', () => searchFriends());
+    els.btnFriendsSearch?.addEventListener('click', () => addFriendByCode());
+    els.btnCopyFriendCode?.addEventListener('click', () => copyMyFriendCode());
+    els.friendsSearchInput?.addEventListener('input', () => {
+        const next = normalizeFriendCodeInput(els.friendsSearchInput.value);
+        if (els.friendsSearchInput.value !== next) {
+            els.friendsSearchInput.value = next;
+        }
+    });
     els.friendsSearchInput?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') searchFriends();
+        if (e.key === 'Enter') addFriendByCode();
     });
     function inviteFriendToPlay(userId) {
         if (!userId) return;
@@ -2205,25 +2244,6 @@
 
     const friendsClickRoot = document.getElementById('screen-friends');
     friendsClickRoot?.addEventListener('click', async (e) => {
-        const add = e.target.closest('[data-friend-add]');
-        if (add) {
-            const userId = add.getAttribute('data-friend-add');
-            const res = await fetch('/api/friends/request', {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId }),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                showToast(data.error || 'Could not send request', 'error');
-                return;
-            }
-            showToast('Friend request sent', 'info');
-            els.friendsSearchResults.innerHTML = '';
-            await refreshFriendsLists();
-            return;
-        }
         const accept = e.target.closest('[data-friend-accept]');
         if (accept) {
             const friendshipId = accept.getAttribute('data-friend-accept');
@@ -2620,7 +2640,9 @@
             ...(state.user || {}),
             id: msg.id,
             display_name: msg.display_name,
+            username: msg.username ?? state.user?.username ?? null,
             elo: msg.elo,
+            friend_code: msg.friend_code ?? state.user?.friend_code ?? null,
             ai_elo: msg.ai_elo,
         });
         if (msg.ai_elo && els.aiEloHint) {

@@ -1153,7 +1153,9 @@ io.on('connection', (socket) => {
             socket.emit('authed', {
                 id: socket.data.user.id,
                 display_name: socket.data.user.display_name,
+                username: socket.data.user.username || null,
                 elo: socket.data.user.elo,
+                friend_code: socket.data.user.friend_code || null,
                 ai_elo: AI_DEFAULT_ELO,
             });
         }
@@ -1545,7 +1547,9 @@ io.on('connection', (socket) => {
             socket.emit('authed', {
                 id: socket.data.user.id,
                 display_name: socket.data.user.display_name,
+                username: socket.data.user.username || null,
                 elo: socket.data.user.elo,
+                friend_code: socket.data.user.friend_code || null,
                 ai_elo: AI_DEFAULT_ELO,
             });
         }

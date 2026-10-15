@@ -18,6 +18,21 @@ function displayNameFromTelegram({ first_name, last_name, username, telegram_id 
     return `Player ${telegram_id}`;
 }
 
+function randomFriendCode() {
+    return String(Math.floor(Math.random() * 1e8)).padStart(8, '0');
+}
+
+async function allocateFriendCode(sql) {
+    for (let i = 0; i < 50; i++) {
+        const code = randomFriendCode();
+        const existing = await sql`
+            SELECT 1 FROM users WHERE friend_code = ${code} LIMIT 1
+        `;
+        if (!existing[0]) return code;
+    }
+    throw new Error('Could not allocate friend_code');
+}
+
 export async function upsertTelegramUser(contact) {
     const sql = getSql();
     const telegramId = Number(contact.telegram_id);
@@ -26,14 +41,16 @@ export async function upsertTelegramUser(contact) {
     }
 
     const displayName = displayNameFromTelegram(contact);
+    const friendCode = await allocateFriendCode(sql);
     const rows = await sql`
-        INSERT INTO users (telegram_id, phone, username, display_name, elo)
+        INSERT INTO users (telegram_id, phone, username, display_name, elo, friend_code)
         VALUES (
             ${telegramId},
             ${contact.phone_number ?? null},
             ${contact.username ?? null},
             ${displayName},
-            ${ELO_START}
+            ${ELO_START},
+            ${friendCode}
         )
         ON CONFLICT (telegram_id) DO UPDATE SET
             phone = COALESCE(EXCLUDED.phone, users.phone),
@@ -45,7 +62,7 @@ export async function upsertTelegramUser(contact) {
                 ELSE users.display_name
             END,
             updated_at = now()
-        RETURNING id, telegram_id, phone, username, display_name, elo, created_at
+        RETURNING id, telegram_id, phone, username, display_name, elo, friend_code, created_at
     `;
     return rows[0];
 }
@@ -69,7 +86,7 @@ export async function updateUserProfile(userId, patch = {}) {
             display_name = ${name},
             updated_at = now()
         WHERE id = ${userId}
-        RETURNING id, telegram_id, phone, username, display_name, elo
+        RETURNING id, telegram_id, phone, username, display_name, elo, friend_code
     `;
     if (!rows[0]) return { ok: false, reason: 'User not found' };
     return { ok: true, user: rows[0] };
@@ -121,7 +138,7 @@ export async function consumeMagicLink(rawToken) {
 
     const session = await createSession(row.user_id);
     const users = await sql`
-        SELECT id, telegram_id, phone, username, display_name, elo
+        SELECT id, telegram_id, phone, username, display_name, elo, friend_code
         FROM users WHERE id = ${row.user_id}
     `;
 
@@ -153,7 +170,7 @@ export async function getUserBySessionRaw(rawSession) {
     const now = new Date();
 
     const rows = await sql`
-        SELECT u.id, u.telegram_id, u.phone, u.username, u.display_name, u.elo, s.expires_at
+        SELECT u.id, u.telegram_id, u.phone, u.username, u.display_name, u.elo, u.friend_code, s.expires_at
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         WHERE s.session_hash = ${sessionHash}
