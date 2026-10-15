@@ -190,15 +190,31 @@ function cleanupRoom(code) {
     delete rooms[code];
 }
 
-function bindRematchPartners(playerA, playerB) {
+function applySeriesWin(room, winnerKey) {
+    if (!room || room.vsAI || room.cupId) return null;
+    const series = {
+        playerOne: Number(room.series?.playerOne) || 0,
+        playerTwo: Number(room.series?.playerTwo) || 0,
+    };
+    if (winnerKey === 'playerOne') series.playerOne += 1;
+    else if (winnerKey === 'playerTwo') series.playerTwo += 1;
+    room.series = series;
+    return { ...series };
+}
+
+function bindRematchPartners(playerA, playerB, series = null) {
     if (!playerA?.id || !playerB?.id || isAiId(playerA.id) || isAiId(playerB.id)) return;
     const sockA = io.sockets.sockets.get(playerA.id);
     const sockB = io.sockets.sockets.get(playerB.id);
+    const p1 = Number(series?.playerOne) || 0;
+    const p2 = Number(series?.playerTwo) || 0;
     if (sockA) {
         sockA.data.rematchPartner = {
             socketId: playerB.id,
             userId: playerB.userId || null,
             displayName: playerB.displayName || 'Opponent',
+            myWins: p1,
+            theirWins: p2,
         };
     }
     if (sockB) {
@@ -206,6 +222,8 @@ function bindRematchPartners(playerA, playerB) {
             socketId: playerA.id,
             userId: playerA.userId || null,
             displayName: playerA.displayName || 'Opponent',
+            myWins: p2,
+            theirWins: p1,
         };
     }
 }
@@ -807,12 +825,18 @@ function buildRoomResumePayload(code, room, sessionId) {
 
 function createPvpRematchRoom(socketA, socketB) {
     const code = generateRoomCode();
+    // Requester is always Player One — map series by identity, not prior seats
+    const series = {
+        playerOne: Number(socketA.data?.rematchPartner?.myWins) || 0,
+        playerTwo: Number(socketA.data?.rematchPartner?.theirWins) || 0,
+    };
     rooms[code] = {
         code,
         vsAI: false,
         playerOne: seatFromSocket(socketA),
         playerTwo: seatFromSocket(socketB),
         status: 'ready',
+        series,
     };
     clearRematchState(socketA);
     clearRematchState(socketB);
@@ -820,11 +844,13 @@ function createPvpRematchRoom(socketA, socketB) {
         roomId: code,
         playerName: 'Player One',
         opponentName: rooms[code].playerTwo?.displayName || 'Opponent',
+        series,
     });
     socketB.emit('rematchStarted', {
         roomId: code,
         playerName: 'Player Two',
         opponentName: rooms[code].playerOne?.displayName || 'Opponent',
+        series,
     });
 }
 
@@ -857,8 +883,12 @@ async function finishGame(code, winnerKey) {
         cupMatchId,
     };
 
-    if (!room.vsAI && !isCupMatch) {
-        bindRematchPartners(room.playerOne, room.playerTwo);
+    const series =
+        !room.vsAI && !isCupMatch
+            ? applySeriesWin(room, winnerKey)
+            : null;
+    if (series) {
+        bindRematchPartners(room.playerOne, room.playerTwo, series);
     }
 
     const winPayload = {
@@ -872,6 +902,7 @@ async function finishGame(code, winnerKey) {
         // Secrets for end-game digit review (what each player was defending)
         playerOneSecret: room.playerOne?.answer || null,
         playerTwoSecret: room.playerTwo?.answer || null,
+        series,
         elo: room.vsAI
             ? {
                   playerOneDelta: 0,
@@ -986,15 +1017,24 @@ function tryStartGame(code) {
     }
 
     syncTurnTimers(code);
+    const seriesPayload =
+        !room.vsAI && !room.cupId && room.series
+            ? {
+                  playerOne: Number(room.series.playerOne) || 0,
+                  playerTwo: Number(room.series.playerTwo) || 0,
+              }
+            : null;
     emitToPlayer(room.playerOne, 'gamestarted', {
         roomId: code,
         turnMsRemaining: turnMsRemainingFor(room.playerOne) ?? TURN_MS,
+        series: seriesPayload,
     });
     emitToPlayer(room.playerTwo, 'gamestarted', {
         roomId: code,
         turnMsRemaining: isAiId(room.playerTwo?.id)
             ? null
             : turnMsRemainingFor(room.playerTwo) ?? TURN_MS,
+        series: seriesPayload,
     });
 
     if (room.vsAI) {

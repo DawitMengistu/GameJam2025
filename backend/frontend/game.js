@@ -158,6 +158,9 @@
         historyList: document.getElementById('history-list'),
         aiEloHint: document.getElementById('ai-elo-hint'),
         playEloLine: document.getElementById('play-elo-line'),
+        seriesScore: document.getElementById('series-score'),
+        seriesScoreYou: document.getElementById('series-score-you'),
+        seriesScoreOpp: document.getElementById('series-score-opp'),
         btnCreate: document.getElementById('btn-create'),
         btnVsAi: document.getElementById('btn-vs-ai'),
         btnJoin: document.getElementById('btn-join'),
@@ -233,7 +236,61 @@
         /** Secrets under review: P1's number / P2's number (targets of opponent guesses) */
         reviewP1Secret: null,
         reviewP2Secret: null,
+        /** Rematch series wins by seat: { playerOne, playerTwo } */
+        series: null,
     };
+
+    function isCompactGuessDevice() {
+        return window.matchMedia('(max-width: 768px)').matches;
+    }
+
+    function setSeriesFromPayload(series) {
+        if (
+            !series ||
+            typeof series.playerOne !== 'number' ||
+            typeof series.playerTwo !== 'number'
+        ) {
+            return;
+        }
+        state.series = {
+            playerOne: series.playerOne,
+            playerTwo: series.playerTwo,
+        };
+        renderSeriesScore();
+    }
+
+    function clearSeriesScore() {
+        state.series = null;
+        els.seriesScore?.classList.add('hide');
+    }
+
+    function renderSeriesScore() {
+        if (!els.seriesScore || !els.seriesScoreYou || !els.seriesScoreOpp) return;
+        const series = state.series;
+        if (
+            !series ||
+            state.vsAI ||
+            state.cupId ||
+            state.spectating ||
+            (series.playerOne === 0 && series.playerTwo === 0)
+        ) {
+            els.seriesScore.classList.add('hide');
+            return;
+        }
+        const you =
+            state.playerName === 'Player Two'
+                ? series.playerTwo
+                : series.playerOne;
+        const opp =
+            state.playerName === 'Player Two'
+                ? series.playerOne
+                : series.playerTwo;
+        els.seriesScoreYou.textContent = String(you);
+        els.seriesScoreOpp.textContent = String(opp);
+        els.seriesScore.classList.remove('hide');
+        els.seriesScoreYou.classList.toggle('is-leading', you > opp);
+        els.seriesScoreOpp.classList.toggle('is-leading', opp > you);
+    }
 
     let myTimeInterval = null;
     let myTurnEndsAt = 0;
@@ -1026,6 +1083,7 @@
         els.btnResign.disabled = true;
         stopAllTimers();
         applyBoardLabels();
+        renderSeriesScore();
         refreshHistoryHighlights();
         playEndSound(didWin);
         showResultPopup(didWin);
@@ -1161,6 +1219,7 @@
         state.vsAI = false;
         state.opponentName = null;
         state.cupMatchId = null;
+        clearSeriesScore();
         els.historyBoard.innerHTML = '';
         els.mySecretDisplay.textContent = '____';
         els.secretInput.value = '';
@@ -1290,12 +1349,18 @@
         resetDigitTracker();
         clearMatchChat();
         clearEndBanner();
+        renderSeriesScore();
         showScreen('play');
         syncMatchChatVisibility();
         if (opts.startTimer === false) {
             stopMyTimer();
         } else {
             startMyTimer(opts.turnMsRemaining);
+        }
+        if (els.guessInput) {
+            els.guessInput.placeholder = isCompactGuessDevice()
+                ? 'Your guess'
+                : 'Your guess · Enter';
         }
         els.guessInput.focus();
     }
@@ -2454,7 +2519,7 @@
             if (state.gameEnded) els.guessInput.value = '';
             return;
         }
-        // While waiting: allow up to 3 digits to brainstorm; 4th only on your turn (auto-submits)
+        // While waiting: allow up to 3 digits to brainstorm; 4th only on your turn
         const maxLen = state.canAddGuess ? 4 : 3;
         const prev = els.guessInput.dataset.last || '';
         const rawDigits = String(els.guessInput.value).replace(/\D/g, '');
@@ -2464,9 +2529,22 @@
         if (!state.canAddGuess && rawDigits.length > 3 && next.length === 3) {
             showToast('Wait for opponent — then add the 4th digit', 'info');
         }
-        if (state.canAddGuess && next.length === 4) {
+        // Phones: submit on 4th digit. Bigger screens: wait for Enter.
+        if (
+            state.canAddGuess &&
+            next.length === 4 &&
+            isCompactGuessDevice()
+        ) {
             submitGuess(next);
         }
+    });
+
+    els.guessInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        if (isCompactGuessDevice()) return;
+        if (state.screen !== 'play' || state.gameEnded) return;
+        e.preventDefault();
+        submitGuess(els.guessInput.value);
     });
 
     els.btnResign.addEventListener('click', () => {
@@ -2689,6 +2767,7 @@
         state.gameEnded = false;
         state.canAddGuess = true;
         state.rematchWaiting = false;
+        setSeriesFromPayload(msg.series);
         els.historyBoard.innerHTML = '';
         els.guessInput.disabled = false;
         els.btnResign.disabled = false;
@@ -2722,6 +2801,7 @@
             showToast('Set your secret first', 'error');
             return;
         }
+        if (msg.series) setSeriesFromPayload(msg.series);
         enterPlay({ turnMsRemaining: msg.turnMsRemaining });
     });
 
@@ -2812,6 +2892,11 @@
                   : 'Defeat — try again',
             type: 'info',
         };
+        if (!msg.cupId && !state.vsAI && msg.series) {
+            setSeriesFromPayload(msg.series);
+        } else if (msg.cupId || state.vsAI) {
+            clearSeriesScore();
+        }
         queryClient?.invalidate(HISTORY_QUERY_KEY);
         showGameEndBanner(didWin ? 'You win' : 'You lose', didWin, eloLine);
     });

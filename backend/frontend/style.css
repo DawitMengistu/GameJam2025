@@ -1192,6 +1192,57 @@ html.dark .digit-chip:not(.state-in):not(.state-out):not(.state-maybe):hover {
     font-size: 1.15rem;
 }
 
+.series-score {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 6px;
+    margin: 0 0 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background:
+        linear-gradient(135deg, rgba(108, 154, 76, 0.14), transparent 70%),
+        var(--board-row);
+    border: 1px solid rgba(108, 154, 76, 0.28);
+    width: fit-content;
+    margin-inline: auto;
+    font-variant-numeric: tabular-nums;
+}
+
+.series-score.hide {
+    display: none;
+}
+
+.series-score-you,
+.series-score-opp {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--balck-border);
+    line-height: 1;
+}
+
+.series-score-you.is-leading {
+    color: var(--green-main);
+}
+
+.series-score-opp.is-leading {
+    color: var(--red-main);
+}
+
+.series-score-sep {
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.series-score-label {
+    margin-left: 4px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
 .play-elo-line {
     margin: 0;
     text-align: center;
