@@ -27,6 +27,7 @@
             ? createQueryClient({ defaultStaleTime: 60_000 })
             : null;
     const FRIENDS_QUERY_KEY = 'friends';
+    const HISTORY_QUERY_KEY = 'history';
 
     function persistPlayState() {
         try {
@@ -1460,6 +1461,7 @@
             if (els.lobbyMeName) els.lobbyMeName.textContent = state.user.display_name;
             syncProfileElo(state.user.elo);
             warmFriendsCache();
+            warmHistoryCache();
             if (state.screen === 'play') applyBoardLabels();
         } else {
             els.authPanel?.classList.remove('hide');
@@ -1636,18 +1638,27 @@
                 friendDisplayName(b.friend)
             );
         });
-        // Sidebar peek — presence only (invite stays on Friends tab)
         els.lobbyFriendsList.innerHTML = sorted
             .map((item) => {
                 const fid = item.friend?.id || '';
+                const on = Boolean(item.online);
                 return `<div class="friends-row" data-friend-user-id="${escapeHtml(
                     fid
                 )}">
                 <div class="friends-row-main">
+                    <span class="nav-friend-dot ${
+                        on ? 'is-online' : 'is-offline'
+                    }" title="${on ? 'Online' : 'Offline'}" aria-label="${
+                    on ? 'Online' : 'Offline'
+                }"></span>
                     <span class="truncate text-sm">${escapeHtml(
                         friendDisplayName(item.friend)
                     )}</span>
-                    ${presenceLabel(item.online)}
+                </div>
+                <div class="friends-row-actions">
+                    <button type="button" class="nav-friend-invite" data-friend-invite="${escapeHtml(
+                        fid
+                    )}">Invite</button>
                 </div>
             </div>`;
             })
@@ -1871,6 +1882,95 @@
         if (els.btnHistoryBack) els.btnHistoryBack.textContent = 'Back';
     }
 
+    async function fetchHistoryPayload() {
+        const res = await fetch('/api/history', { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Failed to load history');
+        }
+        return data.games || [];
+    }
+
+    async function ensureHistoryLoaded({ force = false } = {}) {
+        if (!queryClient || !state.user) return [];
+        return queryClient.fetchQuery(
+            HISTORY_QUERY_KEY,
+            fetchHistoryPayload,
+            { force }
+        );
+    }
+
+    function warmHistoryCache() {
+        if (!state.user || !queryClient) return;
+        void ensureHistoryLoaded().catch(() => {});
+    }
+
+    function renderHistoryList(games) {
+        if (!els.historyList) return;
+        if (!games?.length) {
+            els.historyList.innerHTML =
+                '<p class="status-line poppins-regular">No games yet — play vs AI or a friend.</p>';
+            return;
+        }
+        els.historyList.innerHTML = games
+            .map((g) => {
+                const delta =
+                    g.kind === 'cup'
+                        ? 'Cup'
+                        : g.elo_delta === 0
+                          ? '—'
+                          : g.elo_delta > 0
+                            ? `+${g.elo_delta}`
+                            : String(g.elo_delta);
+                const resultClass =
+                    g.result === 'win'
+                        ? 'hist-win'
+                        : g.result === 'loss'
+                          ? 'hist-loss'
+                          : '';
+                const label =
+                    g.result_label ||
+                    (g.result === 'win'
+                        ? 'You won'
+                        : g.result === 'loss'
+                          ? 'You lost'
+                          : 'Unknown');
+                const when = g.finished_at
+                    ? new Date(g.finished_at).toLocaleString()
+                    : '';
+                const modeLabel =
+                    g.kind === 'cup'
+                        ? 'Cup'
+                        : g.mode === 'ai'
+                          ? 'AI'
+                          : 'PvP';
+                return `<button type="button" class="history-row ${resultClass}" data-history-id="${escapeHtml(
+                    g.id
+                )}">
+                        <div class="history-row-main">
+                            <span class="poppins-semibold">${escapeHtml(
+                                label
+                            )}</span>
+                            <span class="poppins-regular">vs ${escapeHtml(
+                                g.opponent || 'Opponent'
+                            )}${
+                                g.opponent_elo != null
+                                    ? ` (${g.opponent_elo})`
+                                    : ''
+                            }</span>
+                        </div>
+                        <div class="history-row-meta poppins-regular">
+                            <span>${modeLabel}</span>
+                            <span class="elo-delta">${escapeHtml(
+                                String(delta)
+                            )}${g.kind === 'cup' ? '' : ' Elo'}</span>
+                            <span>${escapeHtml(when)}</span>
+                        </div>
+                    </button>`;
+            })
+            .join('');
+    }
+
     function renderHistoryDetailBoard(detail) {
         const board = els.historyDetailBoard;
         if (!board) return;
@@ -1920,16 +2020,32 @@
 
     async function openHistoryDetail(id) {
         if (!id) return;
+        const detailKey = `history:${id}`;
         try {
-            const res = await fetch(`/api/history/${encodeURIComponent(id)}`, {
-                credentials: 'include',
-            });
-            const data = await res.json();
-            if (!res.ok || !data.game) {
-                showToast(data.error || 'Could not open game', 'error');
-                return;
-            }
-            const g = data.game;
+            const g = await (queryClient
+                ? queryClient.fetchQuery(detailKey, async () => {
+                      const res = await fetch(
+                          `/api/history/${encodeURIComponent(id)}`,
+                          { credentials: 'include' }
+                      );
+                      const data = await res.json();
+                      if (!res.ok || !data.game) {
+                          throw new Error(data.error || 'Could not open game');
+                      }
+                      return data.game;
+                  })
+                : (async () => {
+                      const res = await fetch(
+                          `/api/history/${encodeURIComponent(id)}`,
+                          { credentials: 'include' }
+                      );
+                      const data = await res.json();
+                      if (!res.ok || !data.game) {
+                          throw new Error(data.error || 'Could not open game');
+                      }
+                      return data.game;
+                  })());
+
             state.historyDetailId = id;
             els.historyListPanel?.classList.add('hide');
             els.historyDetailPanel?.classList.remove('hide');
@@ -1953,8 +2069,8 @@
             }
             if (els.btnHistoryBack) els.btnHistoryBack.textContent = 'Back to list';
             renderHistoryDetailBoard(g);
-        } catch {
-            showToast('Network error', 'error');
+        } catch (err) {
+            showToast(err?.message || 'Network error', 'error');
         }
     }
 
@@ -1996,83 +2112,23 @@
     async function openHistory() {
         if (!requireAuth('Log in with Telegram to view match history')) return;
         showHistoryList();
-        els.historyList.innerHTML =
-            '<p class="status-line poppins-regular">Loading…</p>';
         showScreen('history');
-        try {
-            const res = await fetch('/api/history', { credentials: 'include' });
-            const data = await res.json();
-            if (!res.ok) {
-                els.historyList.innerHTML = `<p class="status-line">${
-                    data.error || 'Failed'
-                }</p>`;
-                return;
-            }
-            if (!data.games?.length) {
-                els.historyList.innerHTML =
-                    '<p class="status-line poppins-regular">No games yet — play vs AI or a friend.</p>';
-                return;
-            }
-            els.historyList.innerHTML = data.games
-                .map((g) => {
-                    const delta =
-                        g.kind === 'cup'
-                            ? 'Cup'
-                            : g.elo_delta === 0
-                              ? '—'
-                              : g.elo_delta > 0
-                                ? `+${g.elo_delta}`
-                                : String(g.elo_delta);
-                    const resultClass =
-                        g.result === 'win'
-                            ? 'hist-win'
-                            : g.result === 'loss'
-                              ? 'hist-loss'
-                              : '';
-                    const label =
-                        g.result_label ||
-                        (g.result === 'win'
-                            ? 'You won'
-                            : g.result === 'loss'
-                              ? 'You lost'
-                              : 'Unknown');
-                    const when = g.finished_at
-                        ? new Date(g.finished_at).toLocaleString()
-                        : '';
-                    const modeLabel =
-                        g.kind === 'cup'
-                            ? 'Cup'
-                            : g.mode === 'ai'
-                              ? 'AI'
-                              : 'PvP';
-                    return `<button type="button" class="history-row ${resultClass}" data-history-id="${escapeHtml(
-                        g.id
-                    )}">
-                        <div class="history-row-main">
-                            <span class="poppins-semibold">${escapeHtml(
-                                label
-                            )}</span>
-                            <span class="poppins-regular">vs ${escapeHtml(
-                                g.opponent || 'Opponent'
-                            )}${
-                                g.opponent_elo != null
-                                    ? ` (${g.opponent_elo})`
-                                    : ''
-                            }</span>
-                        </div>
-                        <div class="history-row-meta poppins-regular">
-                            <span>${modeLabel}</span>
-                            <span class="elo-delta">${escapeHtml(
-                                String(delta)
-                            )}${g.kind === 'cup' ? '' : ' Elo'}</span>
-                            <span>${escapeHtml(when)}</span>
-                        </div>
-                    </button>`;
-                })
-                .join('');
-        } catch {
+        const cached = queryClient?.getQueryData(HISTORY_QUERY_KEY);
+        if (cached) {
+            renderHistoryList(cached);
+        } else if (els.historyList) {
             els.historyList.innerHTML =
-                '<p class="status-line">Network error</p>';
+                '<p class="status-line poppins-regular">Loading…</p>';
+        }
+        try {
+            const games = await ensureHistoryLoaded();
+            renderHistoryList(games);
+        } catch (err) {
+            if (!cached && els.historyList) {
+                els.historyList.innerHTML = `<p class="status-line">${
+                    err?.message || 'Network error'
+                }</p>`;
+            }
         }
     }
 
@@ -2101,7 +2157,8 @@
     els.btnHistoryBack?.addEventListener('click', () => {
         if (state.historyDetailId) {
             showHistoryList();
-            openHistory();
+            const cached = queryClient?.getQueryData(HISTORY_QUERY_KEY);
+            if (cached) renderHistoryList(cached);
             return;
         }
         showScreen('lobby');
@@ -2124,6 +2181,12 @@
         }
         socket.emit('friendPlayInvite', { userId, sessionId });
     }
+
+    els.lobbyFriendsList?.addEventListener('click', (e) => {
+        const invite = e.target.closest('[data-friend-invite]');
+        if (!invite || !els.lobbyFriendsList.contains(invite)) return;
+        inviteFriendToPlay(invite.getAttribute('data-friend-invite'));
+    });
 
     const friendsClickRoot = document.getElementById('screen-friends');
     friendsClickRoot?.addEventListener('click', async (e) => {
@@ -2712,6 +2775,7 @@
                   : 'Defeat — try again',
             type: 'info',
         };
+        queryClient?.invalidate(HISTORY_QUERY_KEY);
         showGameEndBanner(didWin ? 'You win' : 'You lose', didWin, eloLine);
     });
 

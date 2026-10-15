@@ -534,7 +534,7 @@ html.dark .nav-friends-peek {
 }
 
 .nav-friends-peek-list .friends-row {
-    padding: 3px 6px;
+    padding: 3px 4px 3px 6px;
     gap: 4px;
     background: transparent;
     border: none;
@@ -550,21 +550,59 @@ html.dark .nav-friends-peek {
     flex-direction: row;
     align-items: center;
     gap: 6px;
-    width: 100%;
+    min-width: 0;
+    flex: 1;
 }
 
-.nav-friends-peek-list .friends-row-main .font-medium,
 .nav-friends-peek-list .friends-row-main .text-sm {
     font-size: 0.72rem;
     font-weight: 500;
     color: var(--muted);
 }
 
-.nav-friends-peek-list .friends-presence {
+.nav-friends-peek-list .friends-row-actions {
     flex-shrink: 0;
-    margin-left: auto;
-    font-size: 0.58rem;
-    letter-spacing: 0.02em;
+}
+
+.nav-friend-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: rgba(108, 154, 76, 0.28);
+}
+
+.nav-friend-dot.is-online {
+    background: #a8d08a;
+}
+
+.nav-friend-dot.is-offline {
+    background: rgba(107, 114, 128, 0.35);
+}
+
+html.dark .nav-friend-dot.is-online {
+    background: #8fbf6e;
+}
+
+html.dark .nav-friend-dot.is-offline {
+    background: rgba(154, 163, 178, 0.35);
+}
+
+.nav-friend-invite {
+    border: none;
+    border-radius: 5px;
+    padding: 2px 6px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    font-family: inherit;
+    line-height: 1.3;
+    cursor: pointer;
+    color: var(--green-main);
+    background: rgba(108, 154, 76, 0.12);
+}
+
+.nav-friend-invite:hover {
+    background: rgba(108, 154, 76, 0.22);
 }
 
 .nav-friends-peek-list .friends-empty {
