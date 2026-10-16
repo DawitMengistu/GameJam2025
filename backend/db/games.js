@@ -18,6 +18,7 @@ export { AI_DEFAULT_ELO };
  *   playerTwoSecret?: string | null,
  *   playerOneName?: string | null,
  *   playerTwoName?: string | null,
+ *   analysis?: object | null,
  * }} opts
  */
 export async function recordFinishedGame(opts) {
@@ -36,6 +37,7 @@ export async function recordFinishedGame(opts) {
         playerTwoSecret = null,
         playerOneName = null,
         playerTwoName = null,
+        analysis = null,
     } = opts;
 
     const board = {
@@ -94,7 +96,8 @@ export async function recordFinishedGame(opts) {
             player_one_id, player_two_id, winner_id,
             player_one_elo_before, player_one_elo_after,
             player_two_elo_before, player_two_elo_after,
-            board_snapshot
+            board_snapshot,
+            analysis
         ) VALUES (
             ${roomCode},
             ${mode},
@@ -105,7 +108,8 @@ export async function recordFinishedGame(opts) {
             ${p1After},
             ${p2Before},
             ${p2After},
-            ${board}
+            ${board},
+            ${analysis}
         )
         RETURNING id
     `;
@@ -116,6 +120,7 @@ export async function recordFinishedGame(opts) {
         playerTwoElo: p2After,
         playerOneDelta: p1Before != null && p1After != null ? p1After - p1Before : 0,
         playerTwoDelta: p2Before != null && p2After != null ? p2After - p2Before : 0,
+        analysis,
     };
 }
 
@@ -212,6 +217,7 @@ export async function getGameDetailForUser(userId, gameId) {
             g.player_two_elo_before,
             g.player_two_elo_after,
             g.board_snapshot,
+            g.analysis,
             p1.display_name AS p1_name,
             p2.display_name AS p2_name
         FROM games g
@@ -251,6 +257,7 @@ export async function getGameDetailForUser(userId, gameId) {
         playerOneSecret: snap.playerOneSecret || null,
         playerTwoSecret: snap.playerTwoSecret || null,
         opponent: vsAi ? 'ATP AI' : isP1 ? p2Name : p1Name,
+        analysis: g.analysis || null,
     };
 }
 

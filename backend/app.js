@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import { fileURLToPath } from 'node:url';
 import { validateNumber, scoreGuess, randomCode } from './ai/codes.js';
 import { createAiBrain, getAiEngine } from './ai/policy.js';
+import { analyzeGame } from './ai/analyze.js';
 import apiRouter from './auth/routes.js';
 import { isDbConfigured } from './db/pool.js';
 import { userFromSocket } from './auth/socketUser.js';
@@ -891,6 +892,21 @@ async function finishGame(code, winnerKey) {
         bindRematchPartners(room.playerOne, room.playerTwo, series);
     }
 
+    let analysis = null;
+    if (!isCupMatch) {
+        try {
+            analysis = analyzeGame({
+                playerOneHistory: snapshot.playerOneHistory,
+                playerTwoHistory: snapshot.playerTwoHistory,
+                playerOneSecret: room.playerOne?.answer || null,
+                playerTwoSecret: room.playerTwo?.answer || null,
+                vsAI: !!room.vsAI,
+            });
+        } catch (err) {
+            console.warn('[analyze] failed:', err?.message || err);
+        }
+    }
+
     const winPayload = {
         roomId: code,
         winner: winnerKey,
@@ -903,6 +919,7 @@ async function finishGame(code, winnerKey) {
         playerOneSecret: room.playerOne?.answer || null,
         playerTwoSecret: room.playerTwo?.answer || null,
         series,
+        analysis,
         elo: room.vsAI
             ? {
                   playerOneDelta: 0,
@@ -980,6 +997,7 @@ async function finishGame(code, winnerKey) {
             playerTwoSecret: room.playerTwo?.answer || null,
             playerOneName: room.playerOne?.displayName || null,
             playerTwoName: room.playerTwo?.displayName || null,
+            analysis,
         });
         // PvP: push Elo update after DB (optional refresh for clients still on overlay)
         if (eloInfo && snapshot.mode === 'pvp') {

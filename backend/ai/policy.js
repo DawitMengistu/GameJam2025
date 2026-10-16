@@ -73,14 +73,54 @@ function argmaxMasked(logits, possibles) {
     return bestCode;
 }
 
-function forwardPolicy(obs, possibles) {
+function forwardLogits(obs) {
     const sd = weights.state_dict;
     let h = matVec(sd['shared.0.weight'], sd['shared.0.bias'], obs);
     for (let i = 0; i < h.length; i++) h[i] = relu(h[i]);
     h = matVec(sd['shared.2.weight'], sd['shared.2.bias'], h);
     for (let i = 0; i < h.length; i++) h[i] = relu(h[i]);
-    const logits = matVec(sd['policy.weight'], sd['policy.bias'], h);
-    return argmaxMasked(logits, possibles);
+    return matVec(sd['policy.weight'], sd['policy.bias'], h);
+}
+
+function forwardPolicy(obs, possibles) {
+    return argmaxMasked(forwardLogits(obs), possibles);
+}
+
+/**
+ * Rank a candidate guess among remaining possibles via NN logits (or uniform if heuristic).
+ * @returns {{ rank: number, pool: number, percentile: number, topCode: string }}
+ */
+export function rankGuessAmongPossibles(history, possibles, guess) {
+    const pool = possibles.length ? possibles : legalCodes;
+    const poolSize = pool.length;
+    if (!poolSize) {
+        return { rank: 1, pool: 0, percentile: 0, topCode: guess };
+    }
+
+    let scored;
+    if (engine === 'neural' && weights) {
+        try {
+            const obs = encodeObs(history, pool);
+            const logits = forwardLogits(obs);
+            scored = pool.map((c) => ({
+                code: c,
+                score: logits[CODE_TO_INDEX[c]] ?? -Infinity,
+            }));
+        } catch {
+            scored = null;
+        }
+    }
+    if (!scored) {
+        scored = pool.map((c) => ({ code: c, score: 0 }));
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    const topCode = scored[0]?.code || pool[0];
+    let rank = scored.findIndex((s) => s.code === guess) + 1;
+    if (rank <= 0) rank = poolSize;
+    const percentile =
+        poolSize <= 1 ? 1 : Math.max(0, Math.min(1, 1 - (rank - 1) / (poolSize - 1)));
+    return { rank, pool: poolSize, percentile, topCode };
 }
 
 export function loadWeights() {

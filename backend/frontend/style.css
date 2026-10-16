@@ -15,7 +15,7 @@
     --radius-sm: 10px;
     --nav-hover: #f3f4f1;
     --board-row: #ecefe8;
-    --board-row-alt: #e0e6da;
+    --board-row-alt: #d5ddd0;
     --history-row-bg: #f4f6f1;
     --scrollbar-size: 8px;
     --scrollbar-track: rgba(59, 59, 59, 0.06);
@@ -33,7 +33,7 @@ html.dark {
     --red-number: #f0f2f5;
     --nav-hover: #232933;
     --board-row: #232933;
-    --board-row-alt: #2a313c;
+    --board-row-alt: #323b48;
     --history-row-bg: #232933;
     --scrollbar-track: rgba(255, 255, 255, 0.04);
     --scrollbar-thumb: rgba(108, 154, 76, 0.4);
@@ -1399,6 +1399,99 @@ html.dark .match-chat-msg.is-me .match-chat-bubble {
 .match-chat-hint {
     margin: 0;
     font-size: 0.68rem;
+    color: var(--muted);
+}
+
+.match-chat.is-report .match-chat-log,
+.match-chat.is-report .match-chat-compose {
+    display: none;
+}
+
+.match-report {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--page-bg);
+    border: 1px solid rgba(59, 59, 59, 0.08);
+}
+
+.match-report.hide {
+    display: none;
+}
+
+html.dark .match-report {
+    background: #12151a;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.match-report--history {
+    flex: none;
+    margin-top: 12px;
+}
+
+.match-report-accuracy {
+    margin: 0;
+    font-size: 1.65rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--green-main);
+    font-variant-numeric: tabular-nums;
+}
+
+.match-report-accuracy span {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-left: 6px;
+}
+
+.match-report-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+
+.match-report-meta strong {
+    color: var(--balck-border);
+    font-weight: 600;
+}
+
+.match-report-row {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    color: var(--balck-border);
+}
+
+.match-report-row .muted {
+    color: var(--muted);
+}
+
+.match-report-opp {
+    margin: 0;
+    padding-top: 8px;
+    border-top: 1px solid rgba(59, 59, 59, 0.1);
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+
+html.dark .match-report-opp {
+    border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.match-report-empty {
+    margin: 0;
+    font-size: 0.82rem;
     color: var(--muted);
 }
 

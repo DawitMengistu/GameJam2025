@@ -387,6 +387,7 @@
                             </div>
                             <div class="bottom-half" id="history-detail-board"></div>
                         </div>
+                        <div id="history-match-report" class="match-report match-report--history hide mt-4" aria-live="polite"></div>
                     </div>
                     <button type="button" id="btn-history-back"
                         class="w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors mt-4">
@@ -594,13 +595,14 @@
                         <p class="side-meta" id="side-role">—</p>
 
                         <div class="match-chat hide" id="match-chat">
-                            <div class="match-chat-title font-medium">Chat</div>
+                            <div class="match-chat-title font-medium" id="match-side-title">Chat</div>
                             <div class="match-chat-log" id="match-chat-log"></div>
-                            <div class="match-chat-compose">
+                            <div class="match-chat-compose" id="match-chat-compose">
                                 <textarea id="match-chat-input" class="match-chat-input field-input" maxlength="100"
                                     rows="2" placeholder="Message…" autocomplete="off"></textarea>
                                 <p class="match-chat-hint">Enter send · Shift+Enter newline · 100 max</p>
                             </div>
+                            <div class="match-report hide" id="match-report" aria-live="polite"></div>
                         </div>
                     </aside>
                 </div>

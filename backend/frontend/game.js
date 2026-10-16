@@ -201,6 +201,10 @@
         matchChat: document.getElementById('match-chat'),
         matchChatLog: document.getElementById('match-chat-log'),
         matchChatInput: document.getElementById('match-chat-input'),
+        matchChatCompose: document.getElementById('match-chat-compose'),
+        matchSideTitle: document.getElementById('match-side-title'),
+        matchReport: document.getElementById('match-report'),
+        historyMatchReport: document.getElementById('history-match-report'),
     };
 
     const state = {
@@ -238,6 +242,8 @@
         reviewP2Secret: null,
         /** Rematch series wins by seat: { playerOne, playerTwo } */
         series: null,
+        /** Post-game NN analysis payload */
+        matchAnalysis: null,
     };
 
     function isCompactGuessDevice() {
@@ -995,13 +1001,117 @@
         if (els.matchChatInput) els.matchChatInput.value = '';
     }
 
+    function luckLabel(luck) {
+        if (luck === 'high') return 'High';
+        if (luck === 'low') return 'Low';
+        return 'Fair';
+    }
+
+    function buildMatchReportHtml(analysis, { youWere, vsAI = false } = {}) {
+        if (!analysis?.playerOne && !analysis?.playerTwo) {
+            return '<p class="match-report-empty">No analysis for this game</p>';
+        }
+        const youKey =
+            youWere === 'playerTwo' ? 'playerTwo' : 'playerOne';
+        const oppKey = youKey === 'playerOne' ? 'playerTwo' : 'playerOne';
+        const you = analysis[youKey];
+        const opp = analysis[oppKey];
+        if (!you) {
+            return '<p class="match-report-empty">No analysis for this game</p>';
+        }
+        const best = you.bestMove
+            ? `Round ${you.bestMove.round} — ${escapeHtml(you.bestMove.label)}`
+            : '—';
+        const worst = you.worstMove
+            ? `Round ${you.worstMove.round} — ${escapeHtml(you.worstMove.label)}`
+            : '—';
+        let oppLine = '';
+        if (!vsAI && opp) {
+            oppLine = `<p class="match-report-opp">Opponent · <strong>${
+                opp.accuracy
+            }%</strong> · Luck ${luckLabel(opp.luck)}</p>`;
+        } else if (vsAI && opp) {
+            oppLine = `<p class="match-report-opp">AI · <strong>${
+                opp.accuracy
+            }%</strong> · Luck ${luckLabel(opp.luck)}</p>`;
+        }
+        return `
+            <p class="match-report-accuracy">${you.accuracy}<span>accuracy</span></p>
+            <p class="match-report-meta">
+                <span>Luck <strong>${luckLabel(you.luck)}</strong></span>
+                <span>Blunders <strong>${you.blunders ?? 0}</strong></span>
+                <span>Guesses <strong>${you.guessCount ?? 0}</strong></span>
+            </p>
+            <p class="match-report-row"><span class="muted">Best</span> ${best}</p>
+            <p class="match-report-row"><span class="muted">Worst</span> ${worst}</p>
+            ${oppLine}
+        `;
+    }
+
+    function clearMatchReport() {
+        state.matchAnalysis = null;
+        els.matchChat?.classList.remove('is-report');
+        if (els.matchSideTitle) els.matchSideTitle.textContent = 'Chat';
+        els.matchReport?.classList.add('hide');
+        if (els.matchReport) els.matchReport.innerHTML = '';
+        els.matchChatCompose?.classList.remove('hide');
+        els.matchChatLog?.classList.remove('hide');
+    }
+
+    function showMatchReport(analysis, opts = {}) {
+        if (!els.matchChat || !els.matchReport) return;
+        state.matchAnalysis = analysis || null;
+        const youWere =
+            opts.youWere ||
+            (state.playerName === 'Player Two' ? 'playerTwo' : 'playerOne');
+        const vsAI = opts.vsAI != null ? opts.vsAI : state.vsAI;
+        els.matchChat.classList.remove('hide');
+        els.matchChat.classList.add('is-report');
+        if (els.matchSideTitle) els.matchSideTitle.textContent = 'Match report';
+        els.matchChatCompose?.classList.add('hide');
+        els.matchChatLog?.classList.add('hide');
+        els.matchReport.classList.remove('hide');
+        els.matchReport.innerHTML = buildMatchReportHtml(analysis, {
+            youWere,
+            vsAI,
+        });
+    }
+
+    function renderHistoryMatchReport(analysis, youWere, vsAI = false) {
+        if (!els.historyMatchReport) return;
+        if (!analysis) {
+            els.historyMatchReport.classList.add('hide');
+            els.historyMatchReport.innerHTML = '';
+            return;
+        }
+        els.historyMatchReport.classList.remove('hide');
+        els.historyMatchReport.innerHTML = `
+            <p class="match-chat-title font-medium m-0 mb-2">Match report</p>
+            ${buildMatchReportHtml(analysis, { youWere, vsAI })}
+        `;
+    }
+
     function syncMatchChatVisibility() {
+        if (state.gameEnded && state.matchAnalysis) {
+            // Keep report visible after game over (PvP + AI)
+            const show =
+                state.screen === 'play' && !state.spectating;
+            els.matchChat?.classList.toggle('hide', !show);
+            return;
+        }
         const show =
             state.screen === 'play' &&
             !!state.roomId &&
             !state.vsAI &&
-            !state.spectating;
+            !state.spectating &&
+            !state.gameEnded;
         els.matchChat?.classList.toggle('hide', !show);
+        if (!show) return;
+        els.matchChat?.classList.remove('is-report');
+        if (els.matchSideTitle) els.matchSideTitle.textContent = 'Chat';
+        els.matchReport?.classList.add('hide');
+        els.matchChatCompose?.classList.remove('hide');
+        els.matchChatLog?.classList.remove('hide');
     }
 
     function appendChatMessage({ from, text, isMe, playSound = false }) {
@@ -1220,6 +1330,7 @@
         state.opponentName = null;
         state.cupMatchId = null;
         clearSeriesScore();
+        clearMatchReport();
         els.historyBoard.innerHTML = '';
         els.mySecretDisplay.textContent = '____';
         els.secretInput.value = '';
@@ -1348,6 +1459,7 @@
         applyBoardLabels();
         resetDigitTracker();
         clearMatchChat();
+        clearMatchReport();
         clearEndBanner();
         renderSeriesScore();
         showScreen('play');
@@ -1988,6 +2100,7 @@
         els.historyListPanel?.classList.remove('hide');
         els.historyDetailPanel?.classList.add('hide');
         if (els.btnHistoryBack) els.btnHistoryBack.textContent = 'Back';
+        renderHistoryMatchReport(null);
     }
 
     async function fetchHistoryPayload() {
@@ -2178,6 +2291,11 @@
             }
             if (els.btnHistoryBack) els.btnHistoryBack.textContent = 'Back to list';
             renderHistoryDetailBoard(g);
+            renderHistoryMatchReport(
+                g.analysis,
+                g.youWere === 'playerTwo' ? 'playerTwo' : 'playerOne',
+                g.mode === 'ai' || g.kind === 'ai'
+            );
         } catch (err) {
             showToast(err?.message || 'Network error', 'error');
         }
@@ -2772,6 +2890,7 @@
         state.canAddGuess = true;
         state.rematchWaiting = false;
         setSeriesFromPayload(msg.series);
+        clearMatchReport();
         els.historyBoard.innerHTML = '';
         els.guessInput.disabled = false;
         els.btnResign.disabled = false;
@@ -2901,8 +3020,20 @@
         } else if (msg.cupId || state.vsAI) {
             clearSeriesScore();
         }
+        if (!msg.cupId && msg.analysis) {
+            showMatchReport(msg.analysis, {
+                youWere:
+                    state.playerName === 'Player Two'
+                        ? 'playerTwo'
+                        : 'playerOne',
+                vsAI: state.vsAI,
+            });
+        } else {
+            clearMatchReport();
+        }
         queryClient?.invalidate(HISTORY_QUERY_KEY);
         showGameEndBanner(didWin ? 'You win' : 'You lose', didWin, eloLine);
+        syncMatchChatVisibility();
     });
 
     socket.on('eloUpdate', (msg) => {
