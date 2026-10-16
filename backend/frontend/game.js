@@ -174,6 +174,7 @@
         btnSetSecret: document.getElementById('btn-set-secret'),
         btnLeaveSecret: document.getElementById('btn-leave-secret'),
         guessInput: document.getElementById('guess-input'),
+        guessSteps: document.getElementById('guess-steps'),
         btnResign: document.getElementById('btn-resign'),
         playActions: document.getElementById('play-actions'),
         endActions: document.getElementById('end-actions'),
@@ -1081,6 +1082,7 @@
         els.guessInput.value = '';
         els.guessInput.disabled = true;
         els.btnResign.disabled = true;
+        renderGuessSteps(0);
         stopAllTimers();
         applyBoardLabels();
         renderSeriesScore();
@@ -1361,7 +1363,9 @@
             els.guessInput.placeholder = isCompactGuessDevice()
                 ? 'Your guess'
                 : 'Your guess · Enter';
+            els.guessInput.dataset.last = '';
         }
+        renderGuessSteps(0);
         els.guessInput.focus();
     }
 
@@ -1382,6 +1386,21 @@
             guess: validation.value,
         });
         els.guessInput.value = '';
+        if (els.guessInput.dataset) els.guessInput.dataset.last = '';
+        renderGuessSteps(0);
+    }
+
+    function renderGuessSteps(len = 0) {
+        if (!els.guessSteps) return;
+        const filled = Math.max(0, Math.min(4, Number(len) || 0));
+        els.guessSteps.querySelectorAll('.guess-step').forEach((step) => {
+            const n = Number(step.getAttribute('data-step')) || 0;
+            step.classList.toggle('is-filled', n <= filled);
+            step.classList.toggle(
+                'is-current',
+                filled < 4 && n === filled + 1
+            );
+        });
     }
 
     /** Color a digit vs the secret that side was guessing toward. */
@@ -2526,6 +2545,7 @@
         const next = filterDigitInput(els.guessInput.value, prev, maxLen);
         els.guessInput.value = next;
         els.guessInput.dataset.last = next;
+        renderGuessSteps(next.length);
         if (!state.canAddGuess && rawDigits.length > 3 && next.length === 3) {
             showToast('Wait for opponent — then add the 4th digit', 'info');
         }
@@ -2816,6 +2836,7 @@
             els.playStatus.textContent = 'Your turn';
             startMyTimer(msg.turnMsRemaining);
             // Keep brainstormed digits; 4th digit will submit
+            renderGuessSteps((els.guessInput.value || '').length);
             if ((els.guessInput.value || '').length === 4) {
                 submitGuess(els.guessInput.value);
             } else {
@@ -2830,6 +2851,7 @@
                 els.guessInput.value = capped;
                 els.guessInput.dataset.last = capped;
             }
+            renderGuessSteps((els.guessInput.value || '').length);
         }
     });
 
