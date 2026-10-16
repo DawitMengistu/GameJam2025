@@ -1034,34 +1034,9 @@
             oppBar = matchReportBarHtml(oppLabel, opp.accuracy, { thin: true });
         }
 
-        const moves = Array.isArray(you.moves) ? you.moves : [];
-        const roundsHtml = moves.length
-            ? `<div class="match-report-rounds">${moves
-                  .map((m) => {
-                      const infoPct = Math.round(
-                          Math.max(0, Math.min(1, Number(m.info) || 0)) * 100
-                      );
-                      const blunderClass = m.blunder
-                          ? ' match-report-round--blunder'
-                          : '';
-                      const guess = escapeHtml(m.guess || '————');
-                      return `
-                        <div class="match-report-round${blunderClass}">
-                            <span class="match-report-round-n">R${m.round}</span>
-                            <span class="match-report-round-guess">${guess}</span>
-                            <div class="match-report-round-track">
-                                <div class="match-report-round-fill" style="width:${infoPct}%"></div>
-                            </div>
-                        </div>
-                    `;
-                  })
-                  .join('')}</div>`
-            : '<p class="match-report-empty">No guesses</p>';
-
         return `
-            ${matchReportBarHtml('Accuracy', you.accuracy)}
+            ${matchReportBarHtml('Score', you.accuracy)}
             ${oppBar}
-            ${roundsHtml}
         `;
     }
 
