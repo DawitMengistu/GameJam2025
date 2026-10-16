@@ -159,7 +159,9 @@ export function analyzeSeat(rawHistory, targetSecret = null) {
         });
         const move = {
             round: i + 1,
+            guess,
             score: Math.round(score * 1000) / 1000,
+            info: Math.round(info * 1000) / 1000,
             rank,
             pool: poolSize,
             tag,

@@ -1001,10 +1001,18 @@
         if (els.matchChatInput) els.matchChatInput.value = '';
     }
 
-    function luckLabel(luck) {
-        if (luck === 'high') return 'High';
-        if (luck === 'low') return 'Low';
-        return 'Fair';
+    function matchReportBarHtml(label, pct, { thin = false } = {}) {
+        const clamped = Math.max(0, Math.min(100, Number(pct) || 0));
+        const thinClass = thin ? ' match-report-bar--thin' : '';
+        return `
+            <div class="match-report-bar${thinClass}">
+                <div class="match-report-bar-track">
+                    <div class="match-report-bar-fill" style="width:${clamped}%"></div>
+                    <span class="match-report-bar-label">${escapeHtml(label)}</span>
+                    <span class="match-report-bar-value">${clamped}%</span>
+                </div>
+            </div>
+        `;
     }
 
     function buildMatchReportHtml(analysis, { youWere, vsAI = false } = {}) {
@@ -1019,32 +1027,41 @@
         if (!you) {
             return '<p class="match-report-empty">No analysis for this game</p>';
         }
-        const best = you.bestMove
-            ? `Round ${you.bestMove.round} — ${escapeHtml(you.bestMove.label)}`
-            : '—';
-        const worst = you.worstMove
-            ? `Round ${you.worstMove.round} — ${escapeHtml(you.worstMove.label)}`
-            : '—';
-        let oppLine = '';
-        if (!vsAI && opp) {
-            oppLine = `<p class="match-report-opp">Opponent · <strong>${
-                opp.accuracy
-            }%</strong> · Luck ${luckLabel(opp.luck)}</p>`;
-        } else if (vsAI && opp) {
-            oppLine = `<p class="match-report-opp">AI · <strong>${
-                opp.accuracy
-            }%</strong> · Luck ${luckLabel(opp.luck)}</p>`;
+
+        let oppBar = '';
+        if (opp) {
+            const oppLabel = vsAI ? 'AI' : 'Opponent';
+            oppBar = matchReportBarHtml(oppLabel, opp.accuracy, { thin: true });
         }
+
+        const moves = Array.isArray(you.moves) ? you.moves : [];
+        const roundsHtml = moves.length
+            ? `<div class="match-report-rounds">${moves
+                  .map((m) => {
+                      const infoPct = Math.round(
+                          Math.max(0, Math.min(1, Number(m.info) || 0)) * 100
+                      );
+                      const blunderClass = m.blunder
+                          ? ' match-report-round--blunder'
+                          : '';
+                      const guess = escapeHtml(m.guess || '————');
+                      return `
+                        <div class="match-report-round${blunderClass}">
+                            <span class="match-report-round-n">R${m.round}</span>
+                            <span class="match-report-round-guess">${guess}</span>
+                            <div class="match-report-round-track">
+                                <div class="match-report-round-fill" style="width:${infoPct}%"></div>
+                            </div>
+                        </div>
+                    `;
+                  })
+                  .join('')}</div>`
+            : '<p class="match-report-empty">No guesses</p>';
+
         return `
-            <p class="match-report-accuracy">${you.accuracy}<span>accuracy</span></p>
-            <p class="match-report-meta">
-                <span>Luck <strong>${luckLabel(you.luck)}</strong></span>
-                <span>Blunders <strong>${you.blunders ?? 0}</strong></span>
-                <span>Guesses <strong>${you.guessCount ?? 0}</strong></span>
-            </p>
-            <p class="match-report-row"><span class="muted">Best</span> ${best}</p>
-            <p class="match-report-row"><span class="muted">Worst</span> ${worst}</p>
-            ${oppLine}
+            ${matchReportBarHtml('Accuracy', you.accuracy)}
+            ${oppBar}
+            ${roundsHtml}
         `;
     }
 

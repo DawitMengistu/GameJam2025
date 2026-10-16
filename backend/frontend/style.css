@@ -1434,65 +1434,150 @@ html.dark .match-report {
     margin-top: 12px;
 }
 
-.match-report-accuracy {
+.match-report-bar {
     margin: 0;
-    font-size: 1.65rem;
-    font-weight: 700;
-    line-height: 1.1;
-    color: var(--green-main);
+}
+
+.match-report-bar-track {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(59, 59, 59, 0.1);
+}
+
+.match-report-bar--thin .match-report-bar-track {
+    height: 22px;
+    margin-top: 2px;
+}
+
+.match-report-bar-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: var(--green-main);
+    opacity: 0.85;
+    border-radius: 8px;
+    transition: width 0.25s ease;
+}
+
+.match-report-bar--thin .match-report-bar-fill {
+    opacity: 0.55;
+    background: var(--blue-main, #3b82f6);
+}
+
+.match-report-bar-label,
+.match-report-bar-value {
+    position: relative;
+    z-index: 1;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--balck-border);
     font-variant-numeric: tabular-nums;
 }
 
-.match-report-accuracy span {
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+.match-report-bar--thin .match-report-bar-label,
+.match-report-bar--thin .match-report-bar-value {
+    font-size: 0.7rem;
+    font-weight: 500;
     color: var(--muted);
-    margin-left: 6px;
 }
 
-.match-report-meta {
+.match-report-rounds {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px 10px;
-    margin: 0;
-    font-size: 0.78rem;
-    color: var(--muted);
-}
-
-.match-report-meta strong {
-    color: var(--balck-border);
-    font-weight: 600;
-}
-
-.match-report-row {
-    margin: 0;
-    font-size: 0.8rem;
-    line-height: 1.35;
-    color: var(--balck-border);
-}
-
-.match-report-row .muted {
-    color: var(--muted);
-}
-
-.match-report-opp {
-    margin: 0;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
     padding-top: 8px;
     border-top: 1px solid rgba(59, 59, 59, 0.1);
-    font-size: 0.78rem;
-    color: var(--muted);
 }
 
-html.dark .match-report-opp {
-    border-top-color: rgba(255, 255, 255, 0.1);
+.match-report-round {
+    display: grid;
+    grid-template-columns: 28px 42px 1fr;
+    align-items: center;
+    gap: 8px;
+}
+
+.match-report-round-n {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.match-report-round-guess {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--balck-border);
+    font-variant-numeric: tabular-nums;
+}
+
+.match-report-round-track {
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(59, 59, 59, 0.12);
+}
+
+.match-report-round-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--green-main);
+    transition: width 0.25s ease;
+}
+
+.match-report-round--blunder .match-report-round-track {
+    background: rgba(220, 60, 60, 0.22);
+}
+
+.match-report-round--blunder .match-report-round-fill {
+    background: rgba(220, 60, 60, 0.75);
+}
+
+.match-report-round--blunder .match-report-round-guess {
+    color: #c0392b;
 }
 
 .match-report-empty {
     margin: 0;
     font-size: 0.82rem;
     color: var(--muted);
+}
+
+html.dark .match-report-bar-track {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .match-report-bar-label,
+html.dark .match-report-bar-value {
+    color: #e8eaed;
+}
+
+html.dark .match-report-rounds {
+    border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .match-report-round-guess {
+    color: #e8eaed;
+}
+
+html.dark .match-report-round-track {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .match-report-round--blunder .match-report-round-track {
+    background: rgba(220, 60, 60, 0.28);
+}
+
+html.dark .match-report-round--blunder .match-report-round-guess {
+    color: #f07178;
 }
 
 .player-time-con {
