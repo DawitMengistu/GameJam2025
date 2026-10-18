@@ -173,6 +173,8 @@
         waitingStatus: document.getElementById('waiting-status'),
         secretInput: document.getElementById('secret-input'),
         secretStatus: document.getElementById('secret-status'),
+        secretDigitPad: document.getElementById('secret-digit-pad'),
+        btnSecretBackspace: document.getElementById('btn-secret-backspace'),
         btnSetSecret: document.getElementById('btn-set-secret'),
         btnLeaveSecret: document.getElementById('btn-leave-secret'),
         guessInput: document.getElementById('guess-input'),
@@ -300,6 +302,42 @@
         els.btnGuessBackspace?.classList.toggle('hide', !mobile);
         // Send button: mobile + enter-to-send mode
         els.btnGuessSend?.classList.toggle('hide', !(mobile && enterToSend));
+        syncSecretInputMode();
+    }
+
+    function syncSecretInputMode() {
+        const mobile = isCompactGuessDevice();
+        if (els.secretInput && !els.secretInput.disabled) {
+            els.secretInput.readOnly = mobile;
+        }
+        if (els.secretInput) {
+            els.secretInput.placeholder = mobile ? '····' : 'e.g. 5821';
+        }
+        els.secretDigitPad?.classList.toggle('is-locked', Boolean(state.secretLocked));
+    }
+
+    function applySecretValue(next) {
+        if (state.secretLocked) return;
+        const value = filterDigitInput(next, els.secretInput?.dataset.last || '', 4);
+        if (els.secretInput) {
+            els.secretInput.value = value;
+            els.secretInput.dataset.last = value;
+        }
+        const validation = validateNumber(value);
+        if (els.btnSetSecret) els.btnSetSecret.disabled = !validation.ok;
+    }
+
+    function appendSecretDigit(digit) {
+        if (!isCompactGuessDevice() || state.secretLocked) return;
+        const prev = els.secretInput?.value || '';
+        if (prev.length >= 4 || prev.includes(String(digit))) return;
+        applySecretValue(prev + digit);
+    }
+
+    function backspaceSecretDigit() {
+        if (!isCompactGuessDevice() || state.secretLocked) return;
+        const prev = els.secretInput?.value || '';
+        applySecretValue(prev.slice(0, -1));
     }
 
     function appendGuessDigit(digit) {
@@ -1525,11 +1563,13 @@
     function goToSecretScreen(statusText) {
         state.secretLocked = false;
         els.secretInput.value = '';
+        els.secretInput.dataset.last = '';
         els.secretInput.disabled = false;
         els.btnSetSecret.disabled = true;
         els.secretStatus.textContent = statusText || 'Enter a 4-digit number (no 0, no repeats)';
         showScreen('secret');
-        els.secretInput.focus();
+        syncSecretInputMode();
+        if (!isCompactGuessDevice()) els.secretInput.focus();
     }
 
     function enterPlay(opts = {}) {
@@ -2799,12 +2839,21 @@
 
     els.secretInput.addEventListener('input', () => {
         if (state.secretLocked) return;
-        const next = filterDigitInput(els.secretInput.value, els.secretInput.dataset.last || '');
-        els.secretInput.value = next;
-        els.secretInput.dataset.last = next;
-        const validation = validateNumber(next);
-        els.btnSetSecret.disabled = !validation.ok;
+        if (isCompactGuessDevice()) {
+            // Mobile pad owns input
+            applySecretValue(els.secretInput.value);
+            return;
+        }
+        applySecretValue(els.secretInput.value);
     });
+
+    els.secretDigitPad?.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-digit]');
+        if (!btn || !els.secretDigitPad.contains(btn)) return;
+        appendSecretDigit(btn.dataset.digit);
+    });
+
+    els.btnSecretBackspace?.addEventListener('click', () => backspaceSecretDigit());
 
     els.btnSetSecret.addEventListener('click', () => {
         const validation = validateNumber(els.secretInput.value);
@@ -3109,6 +3158,7 @@
         els.secretInput.disabled = true;
         els.btnSetSecret.disabled = true;
         els.secretStatus.textContent = 'Secret locked in — waiting for opponent…';
+        syncSecretInputMode();
     });
 
     socket.on('gamestarted', (msg) => {

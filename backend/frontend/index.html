@@ -514,13 +514,25 @@
             <!-- SECRET -->
             <section id="screen-secret" class="screen screen-secret hide">
                 <div
-                    class="w-full max-w-md mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-7 sm:p-9 text-center">
+                    class="secret-card w-full max-w-md mx-auto bg-surface dark:bg-[#1a1f27] rounded-2xl shadow-panel border border-ink/10 dark:border-white/10 p-7 sm:p-9 text-center">
                     <h2 class="text-xl font-semibold m-0 mb-2">Set your secret</h2>
                     <p class="text-sm text-muted m-0 mb-5" id="secret-status">Enter a 4-digit number (no 0, no repeats)
                     </p>
                     <input type="text" id="secret-input"
                         class="field-input w-full rounded-xl border-2 border-[#d5d8d0] dark:border-white/20 focus:border-green-main outline-none px-3.5 py-3 text-center text-xl tracking-[0.35em] bg-white dark:bg-[#12151a] dark:text-[#e8ece4] mb-3.5"
                         inputmode="numeric" pattern="[1-9]*" maxlength="4" placeholder="e.g. 5821" autocomplete="off">
+                    <div class="secret-digit-pad" id="secret-digit-pad" aria-label="Digit pad">
+                        <button type="button" data-digit="1">1</button>
+                        <button type="button" data-digit="2">2</button>
+                        <button type="button" data-digit="3">3</button>
+                        <button type="button" data-digit="4">4</button>
+                        <button type="button" data-digit="5">5</button>
+                        <button type="button" data-digit="6">6</button>
+                        <button type="button" data-digit="7">7</button>
+                        <button type="button" data-digit="8">8</button>
+                        <button type="button" data-digit="9">9</button>
+                        <button type="button" class="secret-bs" id="btn-secret-backspace" aria-label="Delete digit">⌫</button>
+                    </div>
                     <button type="button" id="btn-set-secret"
                         class="w-full rounded-xl px-4 py-3 font-medium text-white bg-green-main hover:bg-green-hovered transition-colors mb-2.5 disabled:opacity-55 disabled:cursor-not-allowed"
                         disabled>Lock in</button>
