@@ -432,6 +432,13 @@
 
                     <div id="profile-guest" class="hide">
                         <p class="friends-empty mb-4">Log in with Telegram to edit your profile.</p>
+                        <label class="profile-toggle rounded-xl border border-ink/10 dark:border-white/10 bg-page dark:bg-[#12151a] px-3.5 py-3 flex items-start justify-between gap-3 cursor-pointer">
+                            <span class="min-w-0">
+                                <span class="block font-medium text-sm">Enter to send guess</span>
+                                <span class="block text-xs text-muted mt-0.5">Off = auto-send when you type 4 digits</span>
+                            </span>
+                            <input type="checkbox" id="profile-enter-to-send-guest" class="profile-toggle-input shrink-0">
+                        </label>
                     </div>
 
                     <form id="profile-form" class="profile-form hide flex flex-col gap-4" autocomplete="off">
@@ -449,6 +456,14 @@
                                 id="profile-friend-code">————</p>
                             <p class="m-0 mt-1 text-xs text-muted">Friends need this 8-digit ID to add you</p>
                         </div>
+
+                        <label class="profile-toggle rounded-xl border border-ink/10 dark:border-white/10 bg-page dark:bg-[#12151a] px-3.5 py-3 flex items-start justify-between gap-3 cursor-pointer">
+                            <span class="min-w-0">
+                                <span class="block font-medium text-sm">Enter to send guess</span>
+                                <span class="block text-xs text-muted mt-0.5">Off = auto-send when you type 4 digits</span>
+                            </span>
+                            <input type="checkbox" id="profile-enter-to-send" class="profile-toggle-input shrink-0">
+                        </label>
 
                         <p class="m-0 text-xs text-muted" id="profile-telegram-hint"></p>
 
@@ -538,13 +553,12 @@
                         <div class="play-end-banner" id="play-end-banner">
                             <p class="play-status font-semibold" id="play-status">Your turn</p>
                             <p class="play-elo-line hide" id="play-elo-line"></p>
-                        </div>
-
-                        <div id="series-score" class="series-score hide" aria-live="polite">
-                            <span class="series-score-you" id="series-score-you">0</span>
-                            <span class="series-score-sep" aria-hidden="true">–</span>
-                            <span class="series-score-opp" id="series-score-opp">0</span>
-                            <span class="series-score-label">series</span>
+                            <div id="series-score" class="series-score hide" aria-live="polite">
+                                <span class="series-score-you" id="series-score-you">0</span>
+                                <span class="series-score-sep" aria-hidden="true">–</span>
+                                <span class="series-score-opp" id="series-score-opp">0</span>
+                                <span class="series-score-label">series</span>
+                            </div>
                         </div>
 
                         <div class="top-half">
@@ -563,8 +577,15 @@
                         <div class="bottom-half" id="history-board"></div>
 
                         <div class="bottom-action-cons" id="play-actions">
-                            <input type="text" id="guess-input" class="answer-input field-input font-medium"
-                                inputmode="numeric" maxlength="4" placeholder="Your guess" autocomplete="off">
+                            <div class="guess-compose">
+                                <input type="text" id="guess-input" class="answer-input field-input font-medium"
+                                    inputmode="numeric" maxlength="4" placeholder="Your guess" autocomplete="off"
+                                    enterkeyhint="done">
+                                <button type="button" id="btn-guess-send"
+                                    class="bottom-btn btn-guess-send font-medium hide">Send</button>
+                                <button type="button" id="btn-guess-backspace"
+                                    class="guess-backspace hide" aria-label="Delete digit">⌫</button>
+                            </div>
                             <button type="button" id="btn-resign"
                                 class="bottom-btn btn-started font-medium">Resign</button>
                         </div>

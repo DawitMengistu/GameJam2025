@@ -1104,11 +1104,17 @@ html.dark .digit-chip:not(.state-in):not(.state-out):not(.state-maybe):hover {
     box-shadow: var(--shadow);
     border: 1px solid rgba(59, 59, 59, 0.08);
     display: grid;
+    /* banner | headers | history | actions — result-popup is absolute overlay */
     grid-template-rows: auto auto minmax(0, 1fr) auto;
     gap: 10px;
     padding: 14px;
     position: relative;
     overflow: hidden;
+}
+
+.game-con > .result-popup {
+    grid-column: 1;
+    grid-row: 1 / -1;
 }
 
 .result-popup {
@@ -1199,7 +1205,7 @@ html.dark .digit-chip:not(.state-in):not(.state-out):not(.state-maybe):hover {
     align-items: baseline;
     justify-content: center;
     gap: 6px;
-    margin: 0 0 6px;
+    margin: 6px auto 0;
     padding: 4px 10px;
     border-radius: 999px;
     background:
@@ -1207,7 +1213,6 @@ html.dark .digit-chip:not(.state-in):not(.state-out):not(.state-maybe):hover {
         var(--board-row);
     border: 1px solid rgba(108, 154, 76, 0.28);
     width: fit-content;
-    margin-inline: auto;
     font-variant-numeric: tabular-nums;
 }
 
@@ -1630,6 +1635,8 @@ html.dark .match-report-round--blunder .match-report-round-guess {
     border: 2px solid rgba(59, 59, 59, 0.2);
     border-radius: 8px;
     padding: 4px;
+    align-items: stretch;
+    flex-shrink: 0;
 }
 
 .bottom-half {
@@ -1646,10 +1653,11 @@ html.dark .match-report-round--blunder .match-report-round-guess {
     display: grid;
     gap: 6px;
     grid-template-columns: 1fr 1fr;
-    min-height: 52px;
+    min-height: 44px;
     background-color: var(--board-row);
     border-radius: 8px;
     padding: 4px;
+    align-items: center;
 }
 
 .singleGuess--a {
@@ -1743,16 +1751,23 @@ html.dark .invite-notify-brand {
 .player-con {
     display: grid;
     gap: 4px;
-    grid-template-columns: 1fr 0.22fr 0.22fr;
+    grid-template-columns: minmax(0, 1fr) 2.2rem 2.2rem;
+    align-items: center;
+    min-width: 0;
 }
 
 .player-name-con {
     position: relative;
     font-size: 0.95rem;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
+    min-width: 0;
+    min-height: 36px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .you-label {
@@ -1783,10 +1798,13 @@ html.dark .invite-notify-brand {
     background: var(--green-main);
     color: #fff;
     border-radius: 8px;
-    padding: 4px 10px;
+    padding: 6px 8px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.12em;
+    min-height: 36px;
+    max-height: 40px;
+    line-height: 1.2;
 }
 
 html.dark .player-name-con.secret-reveal {
@@ -1796,8 +1814,9 @@ html.dark .player-name-con.secret-reveal {
 
 .guess-con {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 2px;
+    min-width: 0;
 }
 
 .single-num {
@@ -1805,12 +1824,73 @@ html.dark .player-name-con.secret-reveal {
     border-radius: 6px;
     border: 1px solid rgba(59, 59, 59, 0.12);
     min-height: 36px;
+    min-width: 0;
     font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.n-o {
+.n-o,
+.player-one-n,
+.player-two-n {
     color: var(--red-number);
-    font-size: 0.95rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.guess-compose {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.guess-compose .answer-input {
+    width: 100%;
+    min-width: 0;
+}
+
+.btn-guess-send {
+    min-width: 72px;
+    width: auto;
+    padding: 0 14px;
+}
+
+.guess-backspace {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(59, 59, 59, 0.18);
+    background: var(--board-row);
+    color: var(--balck-border);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.guess-backspace.hide {
+    display: none !important;
+}
+
+html.dark .guess-backspace {
+    background: #232933;
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #e8ece4;
+}
+
+.profile-toggle-input {
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 2px;
+    accent-color: var(--green-main);
 }
 
 .bottom-action-cons {
@@ -1818,6 +1898,7 @@ html.dark .player-name-con.secret-reveal {
     display: grid;
     gap: 8px;
     grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
 }
 
 .end-action-cons {
@@ -2008,43 +2089,109 @@ html.dark .answer-input::placeholder {
 @media (max-width: 640px) {
     .play-shell {
         grid-template-columns: 1fr;
-        gap: 10px;
+        grid-template-rows: minmax(0, 1fr) auto auto;
+        gap: 8px;
     }
 
     .play-shell.spectating {
         grid-template-columns: 1fr;
     }
 
+    .game-con {
+        grid-row: 1;
+        height: 100%;
+        max-height: 100%;
+        min-height: 0;
+        padding: 10px;
+        gap: 8px;
+    }
+
     .digit-tracker {
+        grid-row: 2;
         flex-direction: row;
         flex-wrap: wrap;
         justify-content: center;
         gap: 8px;
         width: 100%;
+        padding: 4px 0 2px;
     }
 
     .digit-chip {
-        width: 48px;
-        height: 48px;
-        font-size: 1.2rem;
+        width: 46px;
+        height: 46px;
+        font-size: 1.15rem;
+        border-radius: 12px;
     }
 
     .player-time-con {
         display: none;
     }
 
-    .game-con {
-        height: 100%;
-        max-height: 100%;
-        min-height: 0;
+    .side-bar {
+        grid-row: 3;
+        max-height: 22vh;
     }
 
     .bottom-action-cons {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .bottom-action-cons.end-action-cons {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .guess-compose {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+
+    /* Mobile: display-only guess; 1–9 chips act as keyboard */
+    .play-shell.is-mobile-pad .guess-input-display,
+    .play-shell.is-mobile-pad #guess-input {
+        pointer-events: none;
+        caret-color: transparent;
+        text-align: center;
+        letter-spacing: 0.28em;
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+
+    .play-shell.is-mobile-pad .guess-backspace:not(.hide) {
+        display: flex;
+    }
+
+    .play-shell.is-mobile-pad .btn-guess-send:not(.hide) {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 64px;
+        width: auto;
     }
 
     .bottom-btn {
-        width: 100%;
+        width: auto;
+        min-width: 88px;
     }
 
+    .btn-started {
+        width: auto;
+    }
+
+    .player-con {
+        grid-template-columns: minmax(0, 1fr) 1.75rem 1.75rem;
+        gap: 2px;
+    }
+
+    .single-num,
+    .n-o,
+    .player-one-n,
+    .player-two-n,
+    .player-name-con {
+        min-height: 32px;
+        font-size: 0.85rem;
+    }
+
+    .player-name-con.secret-reveal {
+        letter-spacing: 0.08em;
+        padding: 4px 6px;
+    }
 }

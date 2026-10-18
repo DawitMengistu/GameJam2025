@@ -174,6 +174,11 @@
         btnSetSecret: document.getElementById('btn-set-secret'),
         btnLeaveSecret: document.getElementById('btn-leave-secret'),
         guessInput: document.getElementById('guess-input'),
+        btnGuessSend: document.getElementById('btn-guess-send'),
+        btnGuessBackspace: document.getElementById('btn-guess-backspace'),
+        playShell: document.querySelector('#screen-play .play-shell'),
+        profileEnterToSend: document.getElementById('profile-enter-to-send'),
+        profileEnterToSendGuest: document.getElementById('profile-enter-to-send-guest'),
         btnResign: document.getElementById('btn-resign'),
         playActions: document.getElementById('play-actions'),
         endActions: document.getElementById('end-actions'),
@@ -246,8 +251,91 @@
         matchAnalysis: null,
     };
 
+    const ENTER_TO_SEND_KEY = 'atp_enter_to_send';
+
     function isCompactGuessDevice() {
-        return window.matchMedia('(max-width: 768px)').matches;
+        return window.matchMedia('(max-width: 640px)').matches;
+    }
+
+    function getEnterToSend() {
+        try {
+            return localStorage.getItem(ENTER_TO_SEND_KEY) === '1';
+        } catch {
+            return false;
+        }
+    }
+
+    function setEnterToSend(on) {
+        try {
+            localStorage.setItem(ENTER_TO_SEND_KEY, on ? '1' : '0');
+        } catch {
+            /* ignore */
+        }
+        syncGuessInputMode();
+    }
+
+    function syncEnterToSendToggles() {
+        const on = getEnterToSend();
+        if (els.profileEnterToSend) els.profileEnterToSend.checked = on;
+        if (els.profileEnterToSendGuest) els.profileEnterToSendGuest.checked = on;
+    }
+
+    function syncGuessInputMode() {
+        const mobile = isCompactGuessDevice();
+        const enterToSend = getEnterToSend();
+        els.playShell?.classList.toggle('is-mobile-pad', mobile);
+        if (els.guessInput) {
+            els.guessInput.readOnly = mobile;
+            els.guessInput.classList.toggle('guess-input-display', mobile);
+            if (mobile) {
+                els.guessInput.placeholder = '····';
+            } else {
+                els.guessInput.placeholder = enterToSend
+                    ? 'Your guess · Enter'
+                    : 'Your guess';
+            }
+        }
+        els.btnGuessBackspace?.classList.toggle('hide', !mobile);
+        // Send button: mobile + enter-to-send mode
+        els.btnGuessSend?.classList.toggle('hide', !(mobile && enterToSend));
+    }
+
+    function appendGuessDigit(digit) {
+        if (state.screen !== 'play' || state.gameEnded || state.spectating) return;
+        const maxLen = state.canAddGuess ? 4 : 3;
+        const prev = els.guessInput?.value || '';
+        if (prev.length >= maxLen) {
+            if (!state.canAddGuess) {
+                showToast('Wait for opponent — then add the 4th digit', 'info');
+            }
+            return;
+        }
+        if (prev.includes(digit)) return;
+        const next = filterDigitInput(prev + digit, prev, maxLen);
+        if (els.guessInput) {
+            els.guessInput.value = next;
+            els.guessInput.dataset.last = next;
+        }
+        if (!state.canAddGuess && prev.length >= 3) {
+            showToast('Wait for opponent — then add the 4th digit', 'info');
+        }
+        maybeAutoSubmitGuess(next);
+    }
+
+    function backspaceGuessDigit() {
+        if (state.screen !== 'play' || state.gameEnded) return;
+        const prev = els.guessInput?.value || '';
+        const next = prev.slice(0, -1);
+        if (els.guessInput) {
+            els.guessInput.value = next;
+            els.guessInput.dataset.last = next;
+        }
+    }
+
+    function maybeAutoSubmitGuess(value) {
+        if (!state.canAddGuess) return;
+        if (getEnterToSend()) return;
+        if (String(value || '').length === 4) submitGuess(value);
     }
 
     function setSeriesFromPayload(series) {
@@ -1461,12 +1549,8 @@
         } else {
             startMyTimer(opts.turnMsRemaining);
         }
-        if (els.guessInput) {
-            els.guessInput.placeholder = isCompactGuessDevice()
-                ? 'Your guess'
-                : 'Your guess · Enter';
-        }
-        els.guessInput.focus();
+        syncGuessInputMode();
+        if (!isCompactGuessDevice()) els.guessInput?.focus();
     }
 
     function submitGuess(guess) {
@@ -1656,6 +1740,7 @@
 
     function openProfile() {
         showScreen('profile');
+        syncEnterToSendToggles();
         if (!state.user) {
             els.profileGuest?.classList.remove('hide');
             els.profileForm?.classList.add('hide');
@@ -2555,13 +2640,67 @@
     els.btnTheme?.addEventListener('click', () => toggleTheme());
     els.btnThemeMobile?.addEventListener('click', () => toggleTheme());
 
-    els.digitTracker?.addEventListener('click', (e) => {
+    let digitLongPressTimer = null;
+    let digitLongPressFired = false;
+
+    els.digitTracker?.addEventListener('contextmenu', (e) => {
+        if (isCompactGuessDevice()) e.preventDefault();
+    });
+
+    els.digitTracker?.addEventListener('pointerdown', (e) => {
         if (state.spectating) return;
         const chip = e.target.closest('.digit-chip');
-        if (chip && els.digitTracker.contains(chip)) cycleDigitChip(chip);
+        if (!chip || !els.digitTracker.contains(chip)) return;
+        digitLongPressFired = false;
+        clearTimeout(digitLongPressTimer);
+        digitLongPressTimer = setTimeout(() => {
+            digitLongPressFired = true;
+            cycleDigitChip(chip);
+        }, 420);
+    });
+
+    els.digitTracker?.addEventListener('pointerup', (e) => {
+        clearTimeout(digitLongPressTimer);
+        digitLongPressTimer = null;
+        if (state.spectating) return;
+        const chip = e.target.closest('.digit-chip');
+        if (!chip || !els.digitTracker.contains(chip)) return;
+        if (digitLongPressFired) return;
+        if (isCompactGuessDevice() && state.screen === 'play' && !state.gameEnded) {
+            appendGuessDigit(chip.dataset.digit);
+            return;
+        }
+        cycleDigitChip(chip);
+    });
+
+    els.digitTracker?.addEventListener('pointerleave', () => {
+        clearTimeout(digitLongPressTimer);
+        digitLongPressTimer = null;
+    });
+
+    els.digitTracker?.addEventListener('pointercancel', () => {
+        clearTimeout(digitLongPressTimer);
+        digitLongPressTimer = null;
     });
 
     buildDigitTracker();
+    syncEnterToSendToggles();
+    syncGuessInputMode();
+    window.addEventListener('resize', () => syncGuessInputMode());
+
+    els.profileEnterToSend?.addEventListener('change', () => {
+        setEnterToSend(Boolean(els.profileEnterToSend.checked));
+        syncEnterToSendToggles();
+    });
+    els.profileEnterToSendGuest?.addEventListener('change', () => {
+        setEnterToSend(Boolean(els.profileEnterToSendGuest.checked));
+        syncEnterToSendToggles();
+    });
+
+    els.btnGuessBackspace?.addEventListener('click', () => backspaceGuessDigit());
+    els.btnGuessSend?.addEventListener('click', () => {
+        submitGuess(els.guessInput?.value);
+    });
 
     els.matchChatInput?.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
@@ -2629,6 +2768,18 @@
     });
 
     els.guessInput.addEventListener('input', () => {
+        if (isCompactGuessDevice()) {
+            // Mobile pad owns input; keep display sanitized only
+            const maxLen = state.canAddGuess ? 4 : 3;
+            const next = filterDigitInput(
+                els.guessInput.value,
+                els.guessInput.dataset.last || '',
+                maxLen
+            );
+            els.guessInput.value = next;
+            els.guessInput.dataset.last = next;
+            return;
+        }
         if (state.screen !== 'play' || state.gameEnded) {
             if (state.gameEnded) els.guessInput.value = '';
             return;
@@ -2643,19 +2794,13 @@
         if (!state.canAddGuess && rawDigits.length > 3 && next.length === 3) {
             showToast('Wait for opponent — then add the 4th digit', 'info');
         }
-        // Phones: submit on 4th digit. Bigger screens: wait for Enter.
-        if (
-            state.canAddGuess &&
-            next.length === 4 &&
-            isCompactGuessDevice()
-        ) {
-            submitGuess(next);
-        }
+        maybeAutoSubmitGuess(next);
     });
 
     els.guessInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
         if (isCompactGuessDevice()) return;
+        if (!getEnterToSend()) return;
         if (state.screen !== 'play' || state.gameEnded) return;
         e.preventDefault();
         submitGuess(els.guessInput.value);
@@ -2932,8 +3077,8 @@
             startMyTimer(msg.turnMsRemaining);
             // Keep brainstormed digits; 4th digit will submit
             if ((els.guessInput.value || '').length === 4) {
-                submitGuess(els.guessInput.value);
-            } else {
+                maybeAutoSubmitGuess(els.guessInput.value);
+            } else if (!isCompactGuessDevice()) {
                 els.guessInput.focus();
             }
         } else {
