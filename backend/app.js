@@ -236,10 +236,50 @@ function clearRematchState(socket, { notifyRequester = false } = {}) {
         const requester = io.sockets.sockets.get(pendingFrom);
         if (requester) {
             requester.emit('rematchBusy', { reason: 'Opponent left' });
+            requester.data.rematchRequested = false;
         }
     }
     socket.data.rematchPartner = null;
     socket.data.pendingRematchFrom = null;
+    socket.data.rematchRequested = false;
+}
+
+/** Waiting friend-invite room from A → B (status waiting, empty seat). */
+function findWaitingFriendInviteRoom(fromUserId, toUserId) {
+    if (!fromUserId || !toUserId) return null;
+    const from = String(fromUserId);
+    const to = String(toUserId);
+    for (const code of Object.keys(rooms)) {
+        const room = rooms[code];
+        if (!room || room.status !== 'waiting' || room.playerTwo) continue;
+        if (
+            String(room.friendInvite?.fromUserId || '') === from &&
+            String(room.friendInvite?.toUserId || '') === to
+        ) {
+            return { code, room };
+        }
+    }
+    return null;
+}
+
+function closeWaitingFriendInviteRoomsForUser(userId, { silent = false } = {}) {
+    if (!userId) return;
+    const uid = String(userId);
+    for (const code of Object.keys(rooms)) {
+        const room = rooms[code];
+        if (!room || room.status !== 'waiting' || room.playerTwo) continue;
+        if (String(room.friendInvite?.fromUserId || '') !== uid) continue;
+        const hostId = room.playerOne?.id;
+        delete rooms[code];
+        if (!silent && hostId) {
+            io.to(hostId).emit('friendPlayInviteResult', {
+                ok: false,
+                reason: 'superseded',
+                message: 'Invite replaced — joining their room',
+                roomId: code,
+            });
+        }
+    }
 }
 
 function findCupBySocketId(socketId) {
@@ -1533,7 +1573,17 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Both pressed Play again → start immediately
+        if (
+            partnerSocket.data.rematchRequested &&
+            partnerSocket.data.rematchPartner?.socketId === socket.id
+        ) {
+            createPvpRematchRoom(partnerSocket, socket);
+            return;
+        }
+
         const me = identityFromSocket(socket);
+        socket.data.rematchRequested = true;
         partnerSocket.data.pendingRematchFrom = socket.id;
         partnerSocket.emit('rematchInvite', {
             fromSocketId: socket.id,
@@ -1994,6 +2044,71 @@ io.on('connection', (socket) => {
             sessionId: friendSocket.data.sessionId,
         });
 
+        const myUserId = String(socket.data.user.id);
+
+        // Mutual invite: they already invited me → join their waiting room
+        const inbound = findWaitingFriendInviteRoom(friendUserId, myUserId);
+        if (inbound) {
+            // Drop our outbound waiting room without bouncing us to lobby
+            closeWaitingFriendInviteRoomsForUser(myUserId, { silent: true });
+            const { code, room } = inbound;
+            room.playerTwo = seatFromSocket(socket);
+            room.status = 'ready';
+            socket.emit('roomJoined', {
+                roomId: code,
+                playerName: 'Player Two',
+                opponentName: room.playerOne?.displayName || 'Opponent',
+            });
+            emitToPlayer(room.playerOne, 'opponentJoined', {
+                roomId: code,
+                message: 'Friend joined — set your secret number',
+                opponentName: room.playerTwo.displayName || 'Opponent',
+            });
+            socket.emit('friendPlayInviteResult', {
+                ok: true,
+                roomId: code,
+                matched: true,
+                message: 'Matched — both invited!',
+            });
+            emitToPlayer(room.playerOne, 'friendPlayInviteResult', {
+                ok: true,
+                roomId: code,
+                matched: true,
+                message: 'Friend invited you back — matched!',
+            });
+            return;
+        }
+
+        if (
+            findBlockingCupBySocketId(socket.id) ||
+            findBlockingCupBySessionId(socket.data.sessionId)
+        ) {
+            socket.emit('friendPlayInviteResult', {
+                ok: false,
+                reason: 'self_busy',
+                message: 'Leave your current game or cup first',
+            });
+            return;
+        }
+
+        // Allow re-invite while sitting in our own waiting friend room for them
+        const myOutbound = findWaitingFriendInviteRoom(myUserId, friendUserId);
+        if (myOutbound) {
+            socket.emit('friendPlayInviteResult', {
+                ok: true,
+                roomId: myOutbound.code,
+                message: 'Invite already waiting…',
+            });
+            friendSocket.emit('friendPlayInvite', {
+                roomId: myOutbound.code,
+                fromUserId: myUserId,
+                fromName:
+                    socket.data.user.display_name ||
+                    identityFromSocket(socket).displayName,
+            });
+            return;
+        }
+
         if (
             isSocketBusy(socket.id, socket.data.sessionId) ||
             findRoomBySocketId(socket.id) ||
@@ -2008,9 +2123,8 @@ io.on('connection', (socket) => {
         }
 
         if (
-            isSocketBusy(friendSocket.id, friendSocket.data.sessionId) ||
-            findRoomBySocketId(friendSocket.id) ||
-            findRoomBySessionId(friendSocket.data.sessionId)
+            findBlockingCupBySocketId(friendSocket.id) ||
+            findBlockingCupBySessionId(friendSocket.data.sessionId)
         ) {
             socket.emit('friendPlayInviteResult', {
                 ok: false,
@@ -2018,6 +2132,26 @@ io.on('connection', (socket) => {
                 message: 'In a game or cup right now',
             });
             return;
+        }
+
+        // Friend waiting in some other room/game (not a mutual invite to us)
+        const friendRoom =
+            findRoomBySocketId(friendSocket.id) ||
+            findRoomBySessionId(friendSocket.data.sessionId);
+        if (friendRoom) {
+            const fr = friendRoom.room;
+            const isTheirInviteToUs =
+                fr.status === 'waiting' &&
+                String(fr.friendInvite?.fromUserId || '') === friendUserId &&
+                String(fr.friendInvite?.toUserId || '') === myUserId;
+            if (!isTheirInviteToUs) {
+                socket.emit('friendPlayInviteResult', {
+                    ok: false,
+                    reason: 'busy',
+                    message: 'In a game or cup right now',
+                });
+                return;
+            }
         }
 
         const code = generateRoomCode();
@@ -2029,7 +2163,7 @@ io.on('connection', (socket) => {
             status: 'waiting',
             friendInvite: {
                 toUserId: friendUserId,
-                fromUserId: socket.data.user.id,
+                fromUserId: myUserId,
             },
         };
 
@@ -2049,7 +2183,7 @@ io.on('connection', (socket) => {
 
         friendSocket.emit('friendPlayInvite', {
             roomId: code,
-            fromUserId: socket.data.user.id,
+            fromUserId: myUserId,
             fromName:
                 socket.data.user.display_name ||
                 identityFromSocket(socket).displayName,

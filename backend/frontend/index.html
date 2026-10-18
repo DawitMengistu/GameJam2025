@@ -47,37 +47,25 @@
 
 <body class="font-sans text-ink min-h-dvh overflow-x-hidden bg-page dark:bg-[#12151a] dark:text-[#e8ece4]">
     <div class="app-shell flex flex-col md:flex-row min-h-dvh">
-        <!-- LEFT NAV -->
+        <!-- LEFT NAV / mobile top bar + drawer -->
         <aside
-            class="app-nav flex md:flex-col md:w-56 shrink-0 bg-surface/90 dark:bg-[#1a1f27]/90 backdrop-blur-md border-b md:border-b-0 md:border-r border-ink/10 dark:border-white/10 px-3 py-3 md:py-5 gap-3 md:gap-4 z-30">
-            <div class="flex items-center justify-between md:justify-start gap-3 md:flex-col md:items-stretch w-full">
+            class="app-nav flex md:flex-col md:w-56 shrink-0 bg-surface/90 dark:bg-[#1a1f27]/90 backdrop-blur-md border-b md:border-b-0 md:border-r border-ink/10 dark:border-white/10 px-3 py-3 md:py-5 gap-0 md:gap-4 z-40">
+            <div class="nav-bar-row flex items-center justify-between gap-3 w-full">
                 <a href="#" id="nav-brand"
-                    class="text-2xl md:text-3xl font-semibold tracking-wide text-green-main no-underline select-none">ATP</a>
+                    class="text-2xl md:text-3xl font-semibold tracking-wide text-green-main no-underline select-none shrink-0">ATP</a>
 
-                <div class="flex items-center gap-2 md:hidden">
+                <div class="flex items-center gap-2 md:hidden min-w-0">
                     <div id="profile-chip-mobile"
-                        class="hide inline-flex items-center gap-2 max-w-[36vw] bg-page dark:bg-[#232933] px-2.5 py-1 rounded-full border border-ink/10 dark:border-white/10">
+                        class="hide inline-flex items-center gap-1.5 max-w-[36vw] bg-page dark:bg-[#232933] px-2 py-1 rounded-full border border-ink/10 dark:border-white/10 min-w-0">
                         <span class="profile-name text-sm truncate" id="profile-name-mobile">—</span>
                         <span
-                            class="profile-elo text-xs font-semibold text-green-main bg-green-main/15 px-2 py-0.5 rounded-full"
+                            class="profile-elo text-xs font-semibold text-green-main bg-green-main/15 px-1.5 py-0.5 rounded-full shrink-0"
                             id="profile-elo-mobile">100</span>
                     </div>
-                    <div class="inline-flex items-center gap-1.5">
-                        <div class="user-counter inline-flex items-center gap-1.5 text-sm bg-page dark:bg-[#232933] px-2.5 py-1 rounded-full border border-ink/10 dark:border-white/10"
-                            aria-live="polite">
-                            <span id="user-count-num-mobile">0</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor"
-                                viewBox="0 0 16 16" aria-hidden="true" class="opacity-70">
-                                <path
-                                    d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
-                            </svg>
-                        </div>
-                        <button type="button" id="btn-theme-mobile" class="theme-toggle" aria-label="Toggle dark mode"
-                            title="Toggle dark mode">
-                            <span class="theme-icon-sun" aria-hidden="true">☀</span>
-                            <span class="theme-icon-moon" aria-hidden="true">☾</span>
-                        </button>
-                    </div>
+                    <button type="button" id="btn-nav-menu" class="nav-menu-btn" aria-label="Open menu"
+                        aria-expanded="false" aria-controls="nav-panel">
+                        <span class="nav-menu-icon" aria-hidden="true"></span>
+                    </button>
                 </div>
             </div>
 
@@ -90,63 +78,68 @@
                 </div>
             </div>
 
-            <nav class="flex md:flex-col gap-1.5 flex-1 items-center md:items-stretch">
-                <button type="button" id="nav-play"
-                    class="nav-link nav-link-active flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
-                    Play
-                </button>
-                <button type="button" id="nav-cups"
-                    class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
-                    Cups
-                </button>
-                <button type="button" id="nav-friends"
-                    class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors relative">
-                    Friends
-                    <span id="friends-badge" class="nav-badge hide" aria-label="Pending friend requests">0</span>
-                </button>
-                <button type="button" id="nav-history"
-                    class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
-                    History
-                </button>
-                <button type="button" id="nav-rules"
-                    class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
-                    Rules
-                </button>
-                <button type="button" id="nav-profile"
-                    class="nav-link flex-1 md:flex-none text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
-                    Profile
-                </button>
-            </nav>
+            <div id="nav-panel" class="nav-panel">
+                <div class="nav-panel-inner">
+                    <nav class="nav-links flex flex-col gap-1.5 flex-1 items-stretch pt-3 md:pt-0">
+                        <button type="button" id="nav-play"
+                            class="nav-link nav-link-active w-full text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
+                            Play
+                        </button>
+                        <button type="button" id="nav-cups"
+                            class="nav-link w-full text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
+                            Cups
+                        </button>
+                        <button type="button" id="nav-friends"
+                            class="nav-link w-full text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors relative">
+                            Friends
+                            <span id="friends-badge" class="nav-badge hide" aria-label="Pending friend requests">0</span>
+                        </button>
+                        <button type="button" id="nav-history"
+                            class="nav-link w-full text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
+                            History
+                        </button>
+                        <button type="button" id="nav-rules"
+                            class="nav-link w-full text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
+                            Rules
+                        </button>
+                        <button type="button" id="nav-profile"
+                            class="nav-link w-full text-sm font-medium px-3 py-2.5 rounded-xl text-left transition-colors">
+                            Profile
+                        </button>
+                    </nav>
 
-            <div id="nav-friends-peek" class="nav-friends-peek hide hidden md:flex flex-col min-h-0">
-                <p class="nav-friends-peek-title m-0">Online friends</p>
-                <div id="lobby-friends-list" class="nav-friends-peek-list friends-list"></div>
-            </div>
-
-            <div class="hidden md:flex flex-col gap-3 mt-auto">
-                <div class="inline-flex items-center gap-2">
-                    <div class="user-counter inline-flex items-center gap-2 text-sm text-ink dark:text-[#e8ece4] bg-page dark:bg-[#232933] px-3 py-2 rounded-xl border border-ink/10 dark:border-white/10 w-fit"
-                        id="user-counter" aria-live="polite">
-                        <span id="user-count-num">0</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor"
-                            viewBox="0 0 16 16" aria-hidden="true" class="opacity-70">
-                            <path
-                                d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
-                        </svg>
-                        <span class="text-muted text-xs">online</span>
+                    <div id="nav-friends-peek" class="nav-friends-peek hide hidden md:flex flex-col min-h-0">
+                        <p class="nav-friends-peek-title m-0">Online friends</p>
+                        <div id="lobby-friends-list" class="nav-friends-peek-list friends-list"></div>
                     </div>
-                    <button type="button" id="btn-theme" class="theme-toggle" aria-label="Toggle dark mode"
-                        title="Toggle dark mode">
-                        <span class="theme-icon-sun" aria-hidden="true">☀</span>
-                        <span class="theme-icon-moon" aria-hidden="true">☾</span>
-                    </button>
+
+                    <div class="nav-panel-footer flex flex-col gap-3 mt-3 md:mt-auto pt-3 md:pt-0 border-t border-ink/10 dark:border-white/10 md:border-0">
+                        <div class="inline-flex items-center gap-2 flex-wrap">
+                            <div class="user-counter inline-flex items-center gap-2 text-sm text-ink dark:text-[#e8ece4] bg-page dark:bg-[#232933] px-3 py-2 rounded-xl border border-ink/10 dark:border-white/10 w-fit"
+                                id="user-counter" aria-live="polite">
+                                <span id="user-count-num">0</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor"
+                                    viewBox="0 0 16 16" aria-hidden="true" class="opacity-70">
+                                    <path
+                                        d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5" />
+                                </svg>
+                                <span class="text-muted text-xs">online</span>
+                            </div>
+                            <button type="button" id="btn-theme" class="theme-toggle" aria-label="Toggle dark mode"
+                                title="Toggle dark mode">
+                                <span class="theme-icon-sun" aria-hidden="true">☀</span>
+                                <span class="theme-icon-moon" aria-hidden="true">☾</span>
+                            </button>
+                        </div>
+                        <button type="button" id="btn-logout"
+                            class="hide text-sm font-medium text-muted hover:text-ink dark:hover:text-white px-3 py-2 rounded-xl border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] text-left transition-colors">
+                            Log out
+                        </button>
+                    </div>
                 </div>
-                <button type="button" id="btn-logout"
-                    class="hide text-sm font-medium text-muted hover:text-ink dark:hover:text-white px-3 py-2 rounded-xl border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] text-left transition-colors">
-                    Log out
-                </button>
             </div>
         </aside>
+        <button type="button" id="nav-scrim" class="nav-scrim" aria-label="Close menu" tabindex="-1"></button>
 
         <!-- MAIN -->
         <main class="app-main flex-1 min-w-0 min-h-0 relative">
@@ -231,10 +224,6 @@
                             <p class="text-xs text-muted m-0" id="auth-hint">Optional — play as guest anytime.</p>
                         </div>
 
-                        <button type="button" id="btn-logout-mobile"
-                            class="hide md:hidden w-full rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 hover:bg-page hover:text-ink transition-colors">
-                            Log out
-                        </button>
                     </div>
 
                     <p class="mt-6 text-xs text-muted m-0">
@@ -291,6 +280,10 @@
                     <div class="flex items-center justify-center gap-3 flex-wrap mb-5">
                         <span id="cup-code-text"
                             class="room-code text-2xl sm:text-3xl font-semibold tracking-[0.28em] px-5 py-3 bg-[#f4f6f1] dark:bg-[#232933] rounded-xl border border-dashed border-green-main/50 text-green-main">------</span>
+                        <button type="button" id="btn-cup-copy-code"
+                            class="rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
+                            Copy code
+                        </button>
                         <button type="button" id="btn-cup-copy"
                             class="rounded-xl px-4 py-2.5 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
                             Copy link
@@ -502,6 +495,10 @@
                     <div class="waiting-code-row flex items-stretch justify-center gap-3 flex-wrap mb-6">
                         <span id="room-code-text"
                             class="room-code text-2xl sm:text-3xl font-semibold tracking-[0.28em] px-5 bg-[#f4f6f1] dark:bg-[#232933] rounded-xl border border-dashed border-green-main/50 text-green-main">------</span>
+                        <button type="button" id="btn-copy-room-code"
+                            class="btn-copy-code rounded-xl px-4 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
+                            Copy code
+                        </button>
                         <button type="button" id="btn-copy-code"
                             class="btn-copy-code rounded-xl px-4 font-medium text-muted border border-ink/15 dark:border-white/15 hover:bg-page dark:hover:bg-[#232933] hover:text-ink dark:hover:text-white transition-colors">
                             Copy link

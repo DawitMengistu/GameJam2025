@@ -85,7 +85,6 @@
     const els = {
         toastRoot: document.getElementById('toast-root'),
         userCountNum: document.getElementById('user-count-num'),
-        userCountNumMobile: document.getElementById('user-count-num-mobile'),
         profileChip: document.getElementById('profile-chip'),
         profileChipMobile: document.getElementById('profile-chip-mobile'),
         profileName: document.getElementById('profile-name'),
@@ -104,7 +103,9 @@
         btnLoginTelegram: document.getElementById('btn-login-telegram'),
         authHint: document.getElementById('auth-hint'),
         btnLogout: document.getElementById('btn-logout'),
-        btnLogoutMobile: document.getElementById('btn-logout-mobile'),
+        appNav: document.querySelector('.app-nav'),
+        btnNavMenu: document.getElementById('btn-nav-menu'),
+        navScrim: document.getElementById('nav-scrim'),
         navBrand: document.getElementById('nav-brand'),
         navPlay: document.getElementById('nav-play'),
         navCups: document.getElementById('nav-cups'),
@@ -148,13 +149,13 @@
         cupLobbyStatus: document.getElementById('cup-lobby-status'),
         cupPlayerList: document.getElementById('cup-player-list'),
         btnCupCopy: document.getElementById('btn-cup-copy'),
+        btnCupCopyCode: document.getElementById('btn-cup-copy-code'),
         btnCupStart: document.getElementById('btn-cup-start'),
         btnCupLeave: document.getElementById('btn-cup-leave'),
         cupBracketMini: document.getElementById('cup-bracket-mini'),
         spectateActions: document.getElementById('spectate-actions'),
         btnSpectateBack: document.getElementById('btn-spectate-back'),
         btnTheme: document.getElementById('btn-theme'),
-        btnThemeMobile: document.getElementById('btn-theme-mobile'),
         historyList: document.getElementById('history-list'),
         aiEloHint: document.getElementById('ai-elo-hint'),
         playEloLine: document.getElementById('play-elo-line'),
@@ -167,6 +168,7 @@
         joinCodeInput: document.getElementById('join-code-input'),
         roomCodeText: document.getElementById('room-code-text'),
         btnCopyCode: document.getElementById('btn-copy-code'),
+        btnCopyRoomCode: document.getElementById('btn-copy-room-code'),
         btnLeaveWaiting: document.getElementById('btn-leave-waiting'),
         waitingStatus: document.getElementById('waiting-status'),
         secretInput: document.getElementById('secret-input'),
@@ -454,6 +456,24 @@
         els.navProfile?.classList.toggle('nav-link-active', which === 'profile');
     }
 
+    function setMobileNavOpen(open) {
+        const next = Boolean(open);
+        els.appNav?.classList.toggle('is-open', next);
+        els.navScrim?.classList.toggle('is-open', next);
+        if (els.btnNavMenu) {
+            els.btnNavMenu.setAttribute('aria-expanded', next ? 'true' : 'false');
+            els.btnNavMenu.setAttribute(
+                'aria-label',
+                next ? 'Close menu' : 'Open menu'
+            );
+        }
+        document.body.classList.toggle('nav-drawer-open', next);
+    }
+
+    function closeMobileNav() {
+        setMobileNavOpen(false);
+    }
+
     function showScreen(name) {
         state.screen = name;
         Object.entries(screens).forEach(([key, el]) => {
@@ -465,6 +485,7 @@
         else if (name === 'rules') setNavActive('rules');
         else if (name === 'profile') setNavActive('profile');
         else setNavActive('play');
+        closeMobileNav();
         persistPlayState();
     }
 
@@ -920,7 +941,6 @@
     function syncUserCount(count) {
         const text = String(count);
         if (els.userCountNum) els.userCountNum.textContent = text;
-        if (els.userCountNumMobile) els.userCountNumMobile.textContent = text;
     }
 
     function inLivePlay() {
@@ -1710,7 +1730,6 @@
             els.profileChip?.classList.remove('hide');
             els.profileChipMobile?.classList.remove('hide');
             els.btnLogout?.classList.remove('hide');
-            els.btnLogoutMobile?.classList.remove('hide');
             els.lobbyHero?.classList.add('hide');
             els.lobbyMe?.classList.remove('hide');
             els.navFriendsPeek?.classList.remove('hide');
@@ -1728,7 +1747,6 @@
             els.profileChip?.classList.add('hide');
             els.profileChipMobile?.classList.add('hide');
             els.btnLogout?.classList.add('hide');
-            els.btnLogoutMobile?.classList.add('hide');
             els.lobbyHero?.classList.remove('hide');
             els.lobbyMe?.classList.add('hide');
             els.navFriendsPeek?.classList.add('hide');
@@ -2618,6 +2636,16 @@
             showToast('Could not copy — select the code manually', 'error');
         }
     });
+    els.btnCupCopyCode?.addEventListener('click', async () => {
+        const code = state.cupId;
+        if (!code) return;
+        try {
+            await navigator.clipboard.writeText(code);
+            showToast('Cup code copied', 'info');
+        } catch {
+            showToast('Could not copy — select the code manually', 'error');
+        }
+    });
     els.btnCupStart?.addEventListener('click', () => {
         socket.emit('cupStart', { sessionId });
     });
@@ -2638,7 +2666,18 @@
         goNavPlay();
     });
     els.btnTheme?.addEventListener('click', () => toggleTheme());
-    els.btnThemeMobile?.addEventListener('click', () => toggleTheme());
+
+    els.btnNavMenu?.addEventListener('click', () => {
+        const open = !els.appNav?.classList.contains('is-open');
+        setMobileNavOpen(open);
+    });
+    els.navScrim?.addEventListener('click', () => closeMobileNav());
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeMobileNav();
+    });
+    window.addEventListener('resize', () => {
+        if (window.matchMedia('(min-width: 768px)').matches) closeMobileNav();
+    });
 
     let digitLongPressTimer = null;
     let digitLongPressFired = false;
@@ -2722,7 +2761,6 @@
     }
 
     els.btnLogout?.addEventListener('click', () => doLogout());
-    els.btnLogoutMobile?.addEventListener('click', () => doLogout());
 
     els.joinCodeInput.addEventListener('input', () => {
         els.joinCodeInput.value = els.joinCodeInput.value
@@ -2741,6 +2779,16 @@
         try {
             await navigator.clipboard.writeText(buildShareLink({ room: code }));
             showToast('Room invite link copied', 'info');
+        } catch {
+            showToast('Could not copy — select the code manually', 'error');
+        }
+    });
+    els.btnCopyRoomCode?.addEventListener('click', async () => {
+        const code = state.roomId;
+        if (!code) return;
+        try {
+            await navigator.clipboard.writeText(code);
+            showToast('Room code copied', 'info');
         } catch {
             showToast('Could not copy — select the code manually', 'error');
         }
@@ -3035,6 +3083,14 @@
     });
 
     socket.on('rematchInvite', (msg) => {
+        // Both pressed Play again → accept automatically
+        if (state.rematchWaiting && msg?.fromSocketId) {
+            socket.emit('rematchAccept', {
+                fromSocketId: msg.fromSocketId,
+            });
+            hideRematchInvite();
+            return;
+        }
         showRematchInvite(msg.fromName, msg.fromSocketId);
     });
 
@@ -3337,13 +3393,28 @@
     socket.on('friendPlayInviteResult', (msg) => {
         if (!msg) return;
         if (msg.ok) {
-            showToast(msg.message || 'Invite sent…', 'info');
+            if (msg.matched) {
+                hideFriendInviteBar();
+                showToast(msg.message || 'Matched!', 'info');
+            } else {
+                showToast(msg.message || 'Invite sent…', 'info');
+            }
             return;
         }
         showToast(msg.message || 'Could not invite', 'error');
-        if (msg.reason === 'declined' && msg.roomId && state.roomId === msg.roomId) {
+        if (
+            (msg.reason === 'declined' || msg.reason === 'superseded') &&
+            msg.roomId &&
+            state.roomId === msg.roomId
+        ) {
             state.intentionalLeave = true;
-            resetToLobby({ message: 'Friend declined', type: 'info' });
+            resetToLobby({
+                message:
+                    msg.reason === 'superseded'
+                        ? 'Joining their invite…'
+                        : 'Friend declined',
+                type: 'info',
+            });
         }
     });
 
