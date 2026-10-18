@@ -2289,8 +2289,10 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3000, () => {
-    console.log('server running at http://localhost:3000');
+const PORT = Number(process.env.PORT) || 3000;
+
+server.listen(PORT, () => {
+    console.log(`server running at http://localhost:${PORT}`);
     console.log(`[ai] engine: ${getAiEngine()}`);
     console.log(`[db] ${isDbConfigured() ? 'Neon connected (DATABASE_URL set)' : 'no DATABASE_URL — auth disabled'}`);
 });
